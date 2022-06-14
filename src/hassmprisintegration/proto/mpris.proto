@@ -1,0 +1,57 @@
+syntax = "proto3";
+package MPRISPackage;
+
+message MPRISUpdateRequest {
+}
+
+enum PlayerStatus {
+    UNKNOWN = 0;
+    GONE = 1;
+    APPEARED = 2;
+    PLAYING = 3;
+    PAUSED = 4;
+    STOPPED = 5;
+}
+
+message MPRISUpdateReply {
+    string player_id = 1;
+    oneof PlayerUpdate {
+        PlayerStatus status = 2;
+        string json_metadata = 3;
+    }
+}
+
+message ChangePlayerStatusRequest {
+    string player_id = 1;
+    enum PlaybackStatus {
+        UNCHANGED = 0;
+        PLAYING = 1;
+        PAUSED = 2;
+        STOPPED = 3;
+    }
+    PlaybackStatus status = 2;
+}
+
+message ChangePlayerStatusReply {
+}
+
+message PlayerNextRequest {
+    string player_id = 1;
+}
+
+message PlayerNextReply {
+}
+
+message PlayerPreviousRequest {
+    string player_id = 1;
+}
+
+message PlayerPreviousReply {
+}
+
+service MPRISService {
+    rpc Updates(MPRISUpdateRequest) returns (stream MPRISUpdateReply) {}
+    rpc ChangePlayerStatus(ChangePlayerStatusRequest) returns (ChangePlayerStatusReply) {}
+    rpc PlayerNext(PlayerNextRequest) returns (PlayerNextReply) {}
+    rpc PlayerPrevious(PlayerPreviousRequest) returns (PlayerPreviousReply) {}
+}

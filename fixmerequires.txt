@@ -1,0 +1,3 @@
+server: python3-grpcio >= 1.42.0, python3-dasbus
+client: normal grpcio I think works
+for dev: grpcio-tools

@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from . import mpris_pb2 as mpris__pb2
+from hassmpris.proto import mpris_pb2 as mpris__pb2
 
 
 class MPRISServiceStub(object):

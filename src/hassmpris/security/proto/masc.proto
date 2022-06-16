@@ -1,0 +1,18 @@
+syntax = "proto3";
+package MASCPackage;
+
+message IssueCertificateRequest{
+    bytes EncryptedCSR = 2;
+    bytes EncryptedCSRNonce = 1;
+}
+
+message IssueCertificateReply {
+    bytes EncryptedClientCertificate = 1;
+    bytes EncryptedClientCertificateNonce = 2;
+    bytes EncryptedServerCertificate = 3;
+    bytes EncryptedServerCertificateNonce = 4;
+}
+
+service MASCService {
+    rpc IssueCertificate(IssueCertificateRequest) returns (IssueCertificateReply) {}
+}

@@ -81,13 +81,14 @@ class MPRISServiceServicer(mpris_pb2_grpc.MPRISServiceServicer):
         self.queues_lock = threading.RLock()
 
     def __del__(self):
-        with self.queues_lock:
-            queues = list(self.queues)
-        for q in queues:
-            q.put(None)
         if hasattr(self, "mpris"):
             for conn in self.conns:
-                self.mpris.disconnect(conn)
+                try:
+                    self.mpris.disconnect(conn)
+                except ImportError:
+                    pass
+        self._push_to_queues(None)
+        if hasattr(self, "mpris"):
             delattr(self, "mpris")
 
     def _handle_mpris_shutdown(self, unused_mpris):

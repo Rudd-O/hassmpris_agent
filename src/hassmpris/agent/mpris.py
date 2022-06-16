@@ -165,12 +165,18 @@ class MPRIS(threading.Thread, GObject.GObject):
                 with self.players_lock:
                     if old_owner in self.players:
                         emit = True
-                        self.players[old_owner].disconnect_by_func(
-                            self._player_playback_status_changed
-                        )
-                        self.players[old_owner].disconnect_by_func(
-                            self._player_metadata_changed
-                        )
+                        try:
+                            self.players[old_owner].disconnect_by_func(
+                                self._player_playback_status_changed
+                            )
+                        except ImportError:
+                            pass
+                        try:
+                            self.players[old_owner].disconnect_by_func(
+                                self._player_metadata_changed
+                            )
+                        except ImportError:
+                            pass
                         del self.players[old_owner]
                 if emit:
                     self.emit("player-gone", old_owner)
@@ -222,6 +228,8 @@ class MPRIS(threading.Thread, GObject.GObject):
         print("Quitting loop")
         self.emit("mpris-shutdown")
         self.loop.quit()
+        print("Joining thread")
+        self.join()
         print("Quit loop")
 
     def get_players(self) -> Dict[str, Player]:

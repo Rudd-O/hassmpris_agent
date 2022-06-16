@@ -1,3 +1,4 @@
-server: python3-grpcio >= 1.42.0, python3-dasbus
+server: python3-grpcio >= 1.42.0, python3-dasbus, pyxdg
 client: normal grpcio I think works
+both: pyOpenSSL, python3-cryptography
 for dev: grpcio-tools

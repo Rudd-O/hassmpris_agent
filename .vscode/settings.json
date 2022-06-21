@@ -2,10 +2,14 @@
     "python.envFile": "${workspaceFolder}/.env",
     "python.autoComplete.extraPaths": [
         "${workspaceFolder}/../blindecdh/src",
-        "${workspaceFolder}/../simpleauthstrings/src"
+        "${workspaceFolder}/../pskca/src",
+        "${workspaceFolder}/../simpleauthstrings/src",
+        "${workspaceFolder}/../cakes/src"
     ],
     "python.analysis.extraPaths": [
         "${workspaceFolder}/../blindecdh/src",
-        "${workspaceFolder}/../shortauthstrings/src"
+        "${workspaceFolder}/../pskca/src",
+        "${workspaceFolder}/../shortauthstrings/src",
+        "${workspaceFolder}/../cakes/src"
     ]
 }

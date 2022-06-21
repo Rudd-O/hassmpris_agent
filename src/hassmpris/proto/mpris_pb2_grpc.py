@@ -5,7 +5,7 @@ import grpc
 from hassmpris.proto import mpris_pb2 as mpris__pb2
 
 
-class MPRISServiceStub(object):
+class MPRISStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -15,28 +15,28 @@ class MPRISServiceStub(object):
             channel: A grpc.Channel.
         """
         self.Updates = channel.unary_stream(
-                '/MPRISPackage.MPRISService/Updates',
+                '/MPRIS.MPRIS/Updates',
                 request_serializer=mpris__pb2.MPRISUpdateRequest.SerializeToString,
                 response_deserializer=mpris__pb2.MPRISUpdateReply.FromString,
                 )
         self.ChangePlayerStatus = channel.unary_unary(
-                '/MPRISPackage.MPRISService/ChangePlayerStatus',
+                '/MPRIS.MPRIS/ChangePlayerStatus',
                 request_serializer=mpris__pb2.ChangePlayerStatusRequest.SerializeToString,
                 response_deserializer=mpris__pb2.ChangePlayerStatusReply.FromString,
                 )
         self.PlayerNext = channel.unary_unary(
-                '/MPRISPackage.MPRISService/PlayerNext',
+                '/MPRIS.MPRIS/PlayerNext',
                 request_serializer=mpris__pb2.PlayerNextRequest.SerializeToString,
                 response_deserializer=mpris__pb2.PlayerNextReply.FromString,
                 )
         self.PlayerPrevious = channel.unary_unary(
-                '/MPRISPackage.MPRISService/PlayerPrevious',
+                '/MPRIS.MPRIS/PlayerPrevious',
                 request_serializer=mpris__pb2.PlayerPreviousRequest.SerializeToString,
                 response_deserializer=mpris__pb2.PlayerPreviousReply.FromString,
                 )
 
 
-class MPRISServiceServicer(object):
+class MPRISServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Updates(self, request, context):
@@ -64,7 +64,7 @@ class MPRISServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_MPRISServiceServicer_to_server(servicer, server):
+def add_MPRISServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Updates': grpc.unary_stream_rpc_method_handler(
                     servicer.Updates,
@@ -88,12 +88,12 @@ def add_MPRISServiceServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'MPRISPackage.MPRISService', rpc_method_handlers)
+            'MPRIS.MPRIS', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
  # This class is part of an EXPERIMENTAL API.
-class MPRISService(object):
+class MPRIS(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -107,7 +107,7 @@ class MPRISService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_stream(request, target, '/MPRISPackage.MPRISService/Updates',
+        return grpc.experimental.unary_stream(request, target, '/MPRIS.MPRIS/Updates',
             mpris__pb2.MPRISUpdateRequest.SerializeToString,
             mpris__pb2.MPRISUpdateReply.FromString,
             options, channel_credentials,
@@ -124,7 +124,7 @@ class MPRISService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/MPRISPackage.MPRISService/ChangePlayerStatus',
+        return grpc.experimental.unary_unary(request, target, '/MPRIS.MPRIS/ChangePlayerStatus',
             mpris__pb2.ChangePlayerStatusRequest.SerializeToString,
             mpris__pb2.ChangePlayerStatusReply.FromString,
             options, channel_credentials,
@@ -141,7 +141,7 @@ class MPRISService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/MPRISPackage.MPRISService/PlayerNext',
+        return grpc.experimental.unary_unary(request, target, '/MPRIS.MPRIS/PlayerNext',
             mpris__pb2.PlayerNextRequest.SerializeToString,
             mpris__pb2.PlayerNextReply.FromString,
             options, channel_credentials,
@@ -158,7 +158,7 @@ class MPRISService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/MPRISPackage.MPRISService/PlayerPrevious',
+        return grpc.experimental.unary_unary(request, target, '/MPRIS.MPRIS/PlayerPrevious',
             mpris__pb2.PlayerPreviousRequest.SerializeToString,
             mpris__pb2.PlayerPreviousReply.FromString,
             options, channel_credentials,

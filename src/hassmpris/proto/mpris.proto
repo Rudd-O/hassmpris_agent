@@ -1,5 +1,5 @@
 syntax = "proto3";
-package MPRISPackage;
+package MPRIS;
 
 message MPRISUpdateRequest {
 }
@@ -49,7 +49,7 @@ message PlayerPreviousRequest {
 message PlayerPreviousReply {
 }
 
-service MPRISService {
+service MPRIS {
     rpc Updates(MPRISUpdateRequest) returns (stream MPRISUpdateReply) {}
     rpc ChangePlayerStatus(ChangePlayerStatusRequest) returns (ChangePlayerStatusReply) {}
     rpc PlayerNext(PlayerNextRequest) returns (PlayerNextReply) {}

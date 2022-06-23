@@ -15,7 +15,7 @@ from queue import Queue
 
 from concurrent import futures
 
-from hassmpris_agent.certs import PEM
+from hassmpris.certs import PEM
 
 import json
 import grpc

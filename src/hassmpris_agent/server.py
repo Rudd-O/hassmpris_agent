@@ -19,8 +19,8 @@ from hassmpris_agent.control import (  # noqa: E402
     CMD_RESTART,
     CMD_RESET_PAIRINGS,
 )
-from hassmpris_agent import config  # noqa: E402
-from hassmpris_agent import certs  # noqa: E402
+from hassmpris import config  # noqa: E402
+from hassmpris import certs  # noqa: E402
 from hassmpris_agent import verify  # noqa: E402
 
 

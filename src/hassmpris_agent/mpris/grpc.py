@@ -15,7 +15,7 @@ from queue import Queue
 
 from concurrent import futures
 
-from hassmpris.certs import PEM
+from hassmpris_agent.certs import PEM
 
 import json
 import grpc
@@ -25,7 +25,7 @@ from cryptography.x509 import Certificate
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from hassmpris.proto import mpris_pb2_grpc, mpris_pb2
-from hassmpris.agent.mpris.dbus import DBusMPRISInterface
+from hassmpris_agent.mpris.dbus import DBusMPRISInterface
 
 
 def playback_status_to_PlayerStatus(playback_status: str) -> int:
@@ -261,7 +261,7 @@ class MPRISServer(object):
         mpris_server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
         mpris_servicer = MPRISServicer(mpris_iface)
         self.mpris_servicer = mpris_servicer
-        mpris_pb2_grpc.add_MPRISServicer_to_server(  # type: ignore
+        mpris_pb2_grpc.add_MPRISServicer_to_server(
             mpris_servicer,
             mpris_server,
         )

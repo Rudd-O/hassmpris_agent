@@ -3,6 +3,7 @@
     "python.autoComplete.extraPaths": [
         "${workspaceFolder}/../blindecdh/src",
         "${workspaceFolder}/../pskca/src",
+        "${workspaceFolder}/../hassmpris/src",
         "${workspaceFolder}/../simpleauthstrings/src",
         "${workspaceFolder}/../cakes/src"
     ],
@@ -10,6 +11,7 @@
         "${workspaceFolder}/../blindecdh/src",
         "${workspaceFolder}/../pskca/src",
         "${workspaceFolder}/../shortauthstrings/src",
+        "${workspaceFolder}/../hassmpris/src",
         "${workspaceFolder}/../cakes/src"
     ]
 }

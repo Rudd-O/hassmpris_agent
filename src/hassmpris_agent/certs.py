@@ -1,7 +1,5 @@
 import os
-from typing import Optional, Tuple, List
-
-import xdg.BaseDirectory
+from typing import Tuple, List
 
 import pskca
 
@@ -23,31 +21,19 @@ from cryptography.hazmat.primitives.asymmetric.ec import (
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 
-def _folder(folder: Optional[str] = None) -> str:
-    return (
-        folder
-        if folder is not None
-        else os.path.join(
-            xdg.BaseDirectory.xdg_config_home,
-            "hassmpris",
-        )
-    )
-
-
-def _pem(class_: str, type_: str, folder: Optional[str] = None) -> str:
-    folder = _folder(folder)
+def _pem(class_: str, type_: str, folder: str) -> str:
     return os.path.join(folder, "%s.%s" % (class_, type_))
 
 
-def cert_path(class_: str, folder: Optional[str] = None) -> str:
+def cert_path(class_: str, folder: str) -> str:
     return _pem(class_, "crt", folder)
 
 
-def chain_path(class_: str, folder: Optional[str] = None) -> str:
+def chain_path(class_: str, folder: str) -> str:
     return _pem(class_, "trust.pem", folder)
 
 
-def key_path(class_: str, folder: Optional[str] = None) -> str:
+def key_path(class_: str, folder: str) -> str:
     return _pem(class_, "key", folder)
 
 
@@ -76,14 +62,12 @@ def load_trust_chain_from_file(path: str) -> List[Certificate]:
     return certificates
 
 
-def load_client_certs_and_trust_chain() -> Tuple[
-    Certificate,
-    RSAPrivateKey,
-    List[Certificate],
-]:
-    client_certificate_path = cert_path("client")
-    client_key_path = key_path("client")
-    client_trust_chain_path = chain_path("client")
+def load_client_certs_and_trust_chain(
+    folder: str,
+) -> Tuple[Certificate, RSAPrivateKey, List[Certificate]]:
+    client_certificate_path = cert_path("client", folder)
+    client_key_path = key_path("client", folder)
+    client_trust_chain_path = chain_path("client", folder)
 
     return (
         load_certificate_from_file(client_certificate_path),
@@ -93,13 +77,14 @@ def load_client_certs_and_trust_chain() -> Tuple[
 
 
 def save_client_certs_and_trust_chain(
+    folder: str,
     cert: Certificate,
     key: RSAPrivateKey,
     trust_chain: List[Certificate],
 ) -> None:
-    client_certificate_path = cert_path("client")
-    client_key_path = key_path("client")
-    client_trust_chain_path = chain_path("client")
+    client_certificate_path = cert_path("client", folder)
+    client_key_path = key_path("client", folder)
+    client_trust_chain_path = chain_path("client", folder)
 
     with open(client_certificate_path, "wb") as f:
         f.write(PEM.from_rsa_certificate(cert).as_bytes())
@@ -110,11 +95,10 @@ def save_client_certs_and_trust_chain(
             f.write(PEM.from_rsa_certificate(c).as_bytes())
 
 
-def create_and_load_client_key_and_csr() -> Tuple[
-    CertificateSigningRequest,
-    RSAPrivateKey,
-]:
-    client_key_path = key_path("client")
+def create_and_load_client_key_and_csr(
+    folder: str,
+) -> Tuple[CertificateSigningRequest, RSAPrivateKey]:
+    client_key_path = key_path("client", folder)
     csr, key = pskca.create_certificate_signing_request()
     with open(client_key_path, "wb") as f:
         f.write(PEM.from_rsa_privkey(key).as_bytes())
@@ -134,9 +118,9 @@ def create_ca_certs(certpath: str, keypath: str) -> None:
         f.write(PEM.from_rsa_privkey(key).as_bytes())
 
 
-def load_or_create_ca_certs() -> Tuple[Certificate, RSAPrivateKey]:
-    ca_certificate_path = cert_path("ca")
-    ca_key_path = key_path("ca")
+def load_or_create_ca_certs(folder: str) -> Tuple[Certificate, RSAPrivateKey]:
+    ca_certificate_path = cert_path("ca", folder)
+    ca_key_path = key_path("ca", folder)
 
     try:
         return (
@@ -177,9 +161,11 @@ def create_server_certs(
         f.write(PEM.from_rsa_privkey(key).as_bytes())
 
 
-def load_or_create_server_certs() -> Tuple[Certificate, RSAPrivateKey]:
-    server_certificate_path = cert_path("server")
-    server_key_path = key_path("server")
+def load_or_create_server_certs(
+    folder: str,
+) -> Tuple[Certificate, RSAPrivateKey]:
+    server_certificate_path = cert_path("server", folder)
+    server_key_path = key_path("server", folder)
 
     try:
         return (
@@ -187,7 +173,7 @@ def load_or_create_server_certs() -> Tuple[Certificate, RSAPrivateKey]:
             load_key_from_file(server_key_path),
         )
     except FileNotFoundError:
-        ca_certificate, ca_key = load_or_create_ca_certs()
+        ca_certificate, ca_key = load_or_create_ca_certs(folder)
         create_server_certs(
             server_certificate_path,
             server_key_path,

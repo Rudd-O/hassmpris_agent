@@ -261,7 +261,7 @@ class MPRISServer(object):
         mpris_server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
         mpris_servicer = MPRISServicer(mpris_iface)
         self.mpris_servicer = mpris_servicer
-        mpris_pb2_grpc.add_MPRISServicer_to_server(  # noqa # type: ignore
+        mpris_pb2_grpc.add_MPRISServicer_to_server(  # type: ignore
             mpris_servicer,
             mpris_server,
         )

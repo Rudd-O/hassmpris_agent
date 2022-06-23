@@ -47,7 +47,7 @@ Summary:        %{summary}
 %install
 %pyproject_install
 
-%pyproject_save_files %{_name}
+%pyproject_save_files %{dunder_name}
 
 
 %check

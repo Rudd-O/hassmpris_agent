@@ -35,7 +35,7 @@ class CAKESServer(object):
             verification_callback,
             self.certificate_issued_callback,
         )
-        cakes_pb2_grpc.add_CAKESServicer_to_server(
+        cakes_pb2_grpc.add_CAKESServicer_to_server(  # type: ignore
             cakes_servicer,
             cakes_server,
         )

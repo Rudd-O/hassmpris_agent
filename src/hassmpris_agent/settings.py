@@ -36,10 +36,14 @@ def run_and_supervise(
             GLib.idle_add(failure_callback, e)
             return
 
-        ret = p.wait(wait_for)
+        try:
+            ret = p.wait(wait_for)  # handle subprocess.TimeoutExpired
+        except subprocess.TimeoutExpired:
+            ret = None
+
         if ret not in ok_return_values:
             try:
-                raise subprocess.CalledProcessError(ret, cmd)
+                raise subprocess.CalledProcessError(ret if ret else 0, cmd)
             except subprocess.CalledProcessError as e:
                 GLib.idle_add(failure_callback, e)
 

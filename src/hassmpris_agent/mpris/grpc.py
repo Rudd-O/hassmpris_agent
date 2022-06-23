@@ -8,6 +8,7 @@ from typing import (
     cast,
     Generator,
 )
+from google.protobuf.empty_pb2 import Empty
 from functools import wraps
 import collections
 import threading
@@ -247,6 +248,11 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
     ) -> mpris_pb2.PlayerPreviousReply:
         self.mpris.next(request.player_id)
         return mpris_pb2.PlayerPreviousReply()
+
+    def Ping(
+        self, unused_request: Empty, unused_context: grpc.ServicerContext
+    ) -> Empty:
+        return Empty()
 
 
 class MPRISServer(object):

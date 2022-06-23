@@ -62,6 +62,8 @@ Summary:        %{summary}
 
 %files -n python3-%{_name} -f %{pyproject_files}
 %doc README.md
+%{_bindir}/hassmpris-agent
+%{_bindir}/hassmpris-settings
 
 
 %changelog

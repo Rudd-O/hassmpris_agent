@@ -3,3 +3,8 @@ __pycache__
 *.pyo
 *.pyd
 .tox
+dist
+build
+*.egg-info
+*.tar.gz
+*.rpm

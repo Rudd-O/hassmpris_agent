@@ -28,13 +28,13 @@ can then be used for secure mutual TLS or gRPC authenticated communication.}
 
 %description %_description
 
-%package -n python3-%{dunder_name}
+%package -n python3-%{_name}
 Summary:        %{summary}
 
 %description -n python3-%{_name} %_description
 
 %prep
-%autosetup -p1 -n %{_name}-%{version}
+%autosetup -p1 -n %{dunder_name}-%{version}
 
 %generate_buildrequires
 %pyproject_buildrequires -t

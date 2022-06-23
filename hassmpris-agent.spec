@@ -22,9 +22,8 @@ BuildArch:      noarch
 BuildRequires:  python3-devel, python-types-cryptography, openssl
 
 %global _description %{expand:
-This package contains a kit that allows you to develop clients and servers
-that authenticate to each other mutually, issuing certificates to clients that
-can then be used for secure mutual TLS or gRPC authenticated communication.}
+This package contains the agent that Home Assistant connects to in order
+to govern multimedia playback.}
 
 %description %_description
 

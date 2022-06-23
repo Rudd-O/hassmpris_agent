@@ -7,7 +7,8 @@ to govern multimedia playback.
 
 ### Dependencies
 
-Install GTK+ 4 and libnotify on your system.
+Install GTK+ 4 and libnotify on your system.  These should be packages
+provided by the system.
 
 ### This package
 
@@ -24,3 +25,9 @@ firewall ports to allow communication from Home Assistant:
 ### Pair with Home Assistant
 
 Once the agent is running you can connect to your computer from Home Assistant.
+
+## Debugging
+
+The [client utility available here](https://github.com/Rudd-O/hassmpris_client)
+will help you debug issues by allowing you to connect to the agent from your
+machine or another machine.

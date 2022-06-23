@@ -1,4 +1,4 @@
-# Linux desktop multimedia integration with Home Assistant
+# Linux desktop agent to allow MPRIS multimedia control from Home Assistant
 
 This package contains the agent that Home Assistant connects to in order
 to govern multimedia playback.

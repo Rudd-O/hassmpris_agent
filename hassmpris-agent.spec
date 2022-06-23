@@ -10,7 +10,7 @@
 Name:           python-%{_name}
 Version:        0.0.1
 Release:        %{mybuildnumber}%{?dist}
-Summary:        Certificate authority kit, ECDH-powered, SAS-authenticated
+Summary:        Linux desktop agent to allow MPRIS multimedia control from Home Assistant
 
 License:        LGPLv2.1
 URL:            https://github.com/Rudd-O/%{dunder_name}

@@ -211,7 +211,7 @@ class PEM(bytes):
             ok = key.__class__
             raise TypeError("key must be an RSAPrivateKey, was a %s" % ok)
         return klass(
-            key.private_bytes(
+            key.private_bytes(  # type: ignore
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
                 encryption_algorithm=serialization.NoEncryption(),

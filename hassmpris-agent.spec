@@ -16,8 +16,6 @@ License:        LGPLv2.1
 URL:            https://github.com/Rudd-O/%{dunder_name}
 Source:         %{url}/archive/v%{version}/%{dunder_name}-%{version}.tar.gz
 
-Requires:       gtk4
-Requires:       libnotify
 BuildArch:      noarch
 BuildRequires:  python3-devel, python-types-cryptography, openssl
 
@@ -29,6 +27,8 @@ to govern multimedia playback.}
 
 %package -n python3-%{_name}
 Summary:        %{summary}
+Requires:       gtk4
+Requires:       libnotify
 
 %description -n python3-%{_name} %_description
 

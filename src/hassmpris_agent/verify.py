@@ -105,6 +105,15 @@ class PeerVerificationUI(threading.Thread):
         self.join()
 
     def verify(self, peer: str, key: bytes) -> bool:
+        # First, we strip the port from the peer.
+        p = peer.rsplit(":")
+        try:
+            int(p[-1], 10)
+            peer = ":".join(p[:-1])
+        except Exception:
+            pass
+
+        # Then, we continue with the rest.
         with self.threadlock:
             if self.is_blocked(peer):
                 return False

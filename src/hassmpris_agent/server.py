@@ -4,6 +4,9 @@ import shutil
 import signal
 import sys
 
+# FIXME: something is wrong with this, it hangs after several time
+# of being connected, perhaps the executors are getting swamped.
+
 # FIXME: the next line should be fixed when Fedora has
 # protoc 3.19.0 or later, and the protobufs need to be recompiled
 # when that happens.  Not just the hassmpris protos, also the

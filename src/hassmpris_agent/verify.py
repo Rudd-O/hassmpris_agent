@@ -146,7 +146,7 @@ class PeerVerificationUI(threading.Thread):
             return peer in self.blocked
 
     def __start_verification(self, peer: str, key: bytes) -> None:
-        t = "Home Assistant at %s wants to control multimedia playback." % peer
+        t = "Home Assistant at %s wants to control multimedia playback" % peer
         n = Notify.Notification.new(self.name, t, "dialog-information")
         n.continue_with_next_on_close = True
         n.set_timeout(int(self.verify_timeout * 1000))

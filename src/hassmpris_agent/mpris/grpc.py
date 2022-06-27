@@ -1,3 +1,4 @@
+import logging
 from typing import (
     Deque,
     Any,
@@ -12,7 +13,7 @@ from google.protobuf.empty_pb2 import Empty
 from functools import wraps
 import collections
 import threading
-from queue import Queue
+from queue import Queue, Empty as QueueEmpty
 
 from concurrent import futures
 
@@ -27,6 +28,9 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from hassmpris.proto import mpris_pb2_grpc, mpris_pb2
 from hassmpris_agent.mpris.dbus import DBusMPRISInterface
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def playback_status_to_PlayerStatus(playback_status: str) -> int:
@@ -125,8 +129,10 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
     ) -> None:
         print("player %s appeared" % player_id)
         m = mpris_pb2.MPRISUpdateReply(
-            player_id=player_id,
-            status=mpris_pb2.PlayerStatus.APPEARED,
+            player=mpris_pb2.MPRISPlayerUpdate(
+                player_id=player_id,
+                status=mpris_pb2.PlayerStatus.APPEARED,
+            )
         )
         self._push_to_queues(m)
 
@@ -137,8 +143,10 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
     ) -> None:
         print("player %s gone" % player_id)
         m = mpris_pb2.MPRISUpdateReply(
-            player_id=player_id,
-            status=mpris_pb2.PlayerStatus.GONE,
+            player=mpris_pb2.MPRISPlayerUpdate(
+                player_id=player_id,
+                status=mpris_pb2.PlayerStatus.GONE,
+            )
         )
         self._push_to_queues(m)
 
@@ -151,8 +159,10 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         s = playback_status_to_PlayerStatus(playback_status)
         print("player %s status changed: %s" % (player_id, s))
         m = mpris_pb2.MPRISUpdateReply(
-            player_id=player_id,
-            status=s,
+            player=mpris_pb2.MPRISPlayerUpdate(
+                player_id=player_id,
+                status=s,
+            )
         )
         self._push_to_queues(m)
 
@@ -165,8 +175,10 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         s = metadata_to_json_metadata(metadata)
         print("player %s metadata changed: %s" % (player_id, s))
         m = mpris_pb2.MPRISUpdateReply(
-            player_id=player_id,
-            json_metadata=s,
+            player=mpris_pb2.MPRISPlayerUpdate(
+                player_id=player_id,
+                json_metadata=s,
+            )
         )
         self._push_to_queues(m)
 
@@ -184,30 +196,44 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
     ) -> Generator[mpris_pb2.MPRISUpdateReply, None, None]:
         q: Queue[Optional[mpris_pb2.MPRISUpdateReply]] = Queue()
         for player in self.mpris.get_players().values():
-            m = mpris_pb2.MPRISUpdateReply(
+            kws = dict(
                 player_id=player.player_id,
-                status=mpris_pb2.PlayerStatus.APPEARED,
-            )
-            m = mpris_pb2.MPRISUpdateReply(
-                player_id=player.player_id,
-                status=playback_status_to_PlayerStatus(player.playback_status),
+                status=playback_status_to_PlayerStatus(
+                    player.playback_status,
+                ),
             )
             if player.metadata:
+                kws["json_metadata"] = metadata_to_json_metadata(
+                    player.metadata,
+                )
+
                 m = mpris_pb2.MPRISUpdateReply(
-                    player_id=player.player_id,
-                    json_metadata=metadata_to_json_metadata(player.metadata),
+                    player=mpris_pb2.MPRISPlayerUpdate(
+                        **kws,
+                    ),
                 )
             q.put(m)
         with self.queues_lock:
             self.queues.append(q)
-        while True:
-            m = q.get()
-            if m is None:
-                break
-            else:
-                yield m
-        with self.queues_lock:
-            self.queues.remove(q)
+            _LOGGER.info("Clients connected now: %d", len(self.queues))
+        try:
+            while True:
+                try:
+                    m = q.get(timeout=10)
+                except QueueEmpty:
+                    m = mpris_pb2.MPRISUpdateReply(
+                        heartbeat=mpris_pb2.MPRISUpdateHeartbeat(),
+                    )
+                if m is None:
+                    break
+                else:
+                    yield m
+        except Exception:
+            _LOGGER.exception("Problem relaying status update to client")
+        finally:
+            with self.queues_lock:
+                self.queues.remove(q)
+                _LOGGER.info("Clients connected now: %d", len(self.queues))
 
     def stop(self) -> None:
         self.__del__()

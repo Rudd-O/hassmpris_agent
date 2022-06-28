@@ -27,7 +27,7 @@ from cryptography.x509 import Certificate
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from hassmpris.proto import mpris_pb2_grpc, mpris_pb2
-from hassmpris_agent.mpris.dbus import DBusMPRISInterface
+from hassmpris_agent.mpris.dbus import DBusMPRISInterface, Player
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,6 +45,27 @@ def playback_status_to_PlayerStatus(playback_status: str) -> int:
 
 def metadata_to_json_metadata(metadata: Any) -> str:
     return json.dumps(metadata)
+
+
+def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
+    s = playback_status_to_PlayerStatus(player.playback_status)
+    m = metadata_to_json_metadata(player.metadata)
+    return mpris_pb2.MPRISUpdateReply(
+        player=mpris_pb2.MPRISPlayerUpdate(
+            player_id=player.identity,
+            status=s,
+            json_metadata=m,
+        )
+    )
+
+
+def playergonemessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
+    return mpris_pb2.MPRISUpdateReply(
+        player=mpris_pb2.MPRISPlayerUpdate(
+            player_id=player.identity,
+            status=mpris_pb2.PlayerStatus.GONE,
+        )
+    )
 
 
 ServicerContextFunc = TypeVar("ServicerContextFunc", bound=Callable[..., Any])
@@ -125,42 +146,32 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
     def _handle_player_appeared(
         self,
         unused_mpris: Any,
-        player_id: str,
+        player: Player,
     ) -> None:
-        print("player %s appeared" % player_id)
-        m = mpris_pb2.MPRISUpdateReply(
-            player=mpris_pb2.MPRISPlayerUpdate(
-                player_id=player_id,
-                status=mpris_pb2.PlayerStatus.APPEARED,
-            )
-        )
+        _LOGGER.debug("%s appeared", player)
+        m = playerappearedmessage(player)
         self._push_to_queues(m)
 
     def _handle_player_gone(
         self,
         unused_mpris: Any,
-        player_id: str,
+        player: Player,
     ) -> None:
-        print("player %s gone" % player_id)
-        m = mpris_pb2.MPRISUpdateReply(
-            player=mpris_pb2.MPRISPlayerUpdate(
-                player_id=player_id,
-                status=mpris_pb2.PlayerStatus.GONE,
-            )
-        )
+        _LOGGER.debug("%s gone", player)
+        m = playergonemessage(player)
         self._push_to_queues(m)
 
     def _handle_player_playback_status_changed(
         self,
         unused_mpris: Any,
-        player_id: str,
+        player: Player,
         playback_status: str,
     ) -> None:
         s = playback_status_to_PlayerStatus(playback_status)
-        print("player %s status changed: %s" % (player_id, s))
+        _LOGGER.debug("%s status changed: %s", player, s)
         m = mpris_pb2.MPRISUpdateReply(
             player=mpris_pb2.MPRISPlayerUpdate(
-                player_id=player_id,
+                player_id=player.identity,
                 status=s,
             )
         )
@@ -169,14 +180,14 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
     def _handle_player_metadata_changed(
         self,
         unused_mpris: Any,
-        player_id: str,
+        player: Player,
         metadata: Any,
     ) -> None:
         s = metadata_to_json_metadata(metadata)
-        print("player %s metadata changed: %s" % (player_id, s))
+        _LOGGER.debug("%s metadata changed: %s", player.identity, s)
         m = mpris_pb2.MPRISUpdateReply(
             player=mpris_pb2.MPRISPlayerUpdate(
-                player_id=player_id,
+                player_id=player.identity,
                 json_metadata=s,
             )
         )
@@ -195,23 +206,8 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         context: grpc.ServicerContext,
     ) -> Generator[mpris_pb2.MPRISUpdateReply, None, None]:
         q: Queue[Optional[mpris_pb2.MPRISUpdateReply]] = Queue()
-        for player in self.mpris.get_players().values():
-            kws = dict(
-                player_id=player.player_id,
-                status=playback_status_to_PlayerStatus(
-                    player.playback_status,
-                ),
-            )
-            if player.metadata:
-                kws["json_metadata"] = metadata_to_json_metadata(
-                    player.metadata,
-                )
-
-                m = mpris_pb2.MPRISUpdateReply(
-                    player=mpris_pb2.MPRISPlayerUpdate(
-                        **kws,
-                    ),
-                )
+        for player in self.mpris.get_players():
+            m = playerappearedmessage(player)
             q.put(m)
         with self.queues_lock:
             self.queues.append(q)
@@ -272,6 +268,10 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         request: mpris_pb2.PlayerPreviousRequest,
         context: grpc.ServicerContext,
     ) -> mpris_pb2.PlayerPreviousReply:
+        _LOGGER.debug(
+            "Requested %s previous",
+            request.player_id,
+        )
         self.mpris.next(request.player_id)
         return mpris_pb2.PlayerPreviousReply()
 

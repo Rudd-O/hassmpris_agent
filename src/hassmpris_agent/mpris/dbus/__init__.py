@@ -1,4 +1,5 @@
-from typing import Dict, Any
+import logging
+from typing import Dict, Any, Optional, List
 
 from dasbus.typing import get_native
 from dasbus.loop import EventLoop
@@ -10,6 +11,9 @@ import gi
 
 gi.require_version("GLib", "2.0")
 from gi.repository import GLib, GObject  # noqa
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def unpack(obj: Any) -> Any:
@@ -36,36 +40,51 @@ class Player(GObject.GObject):
         ),
     }
 
+    def __str__(self) -> str:
+        return "<Player %s at %s>" % (self.identity, self.player_id)
+
     def __init__(self, bus: SessionMessageBus, player_id: str) -> None:
         GObject.GObject.__init__(self)
         self.player_id = player_id
-        self.proxy = bus.get_proxy(
-            player_id,
-            "/org/mpris/MediaPlayer2",
-            interface_name="org.mpris.MediaPlayer2.Player",
-        )
-        self.propertiesproxy = bus.get_proxy(
+        self.properties_proxy = bus.get_proxy(
             player_id,
             "/org/mpris/MediaPlayer2",
             interface_name="org.freedesktop.DBus.Properties",
         )
-        self.playback_status: str = unpack(self.proxy.PlaybackStatus)
-        self.metadata: Dict[str, Any] = unpack(self.proxy.Metadata)
-        self.propertiesproxy.PropertiesChanged.connect(
+        allprops = unpack(
+            self.properties_proxy.GetAll("org.mpris.MediaPlayer2"),
+        )
+        self.identity: str = allprops.get(
+            "Identity",
+            allprops.get(
+                "DesktopEntry",
+                self.player_id,
+            ),
+        )
+        allplayerprops = unpack(
+            self.properties_proxy.GetAll("org.mpris.MediaPlayer2.Player"),
+        )
+        self.playback_status: str = allplayerprops["PlaybackStatus"]
+        self.metadata: str = allplayerprops["Metadata"]
+
+        kw = {}
+        self.player_proxy = bus.get_proxy(
+            player_id,
+            "/org/mpris/MediaPlayer2",
+            interface_name="org.mpris.MediaPlayer2.Player",
+            **kw,
+        )
+
+        self.properties_proxy.PropertiesChanged.connect(
             self._properties_changed,
         )
-        GLib.idle_add(
-            lambda: self.emit("playback-status-changed", self.playback_status)
-        )
-        if self.metadata:
-            GLib.idle_add(lambda: self.emit("metadata-changed", self.metadata))
 
     def cleanup(self) -> None:
-        if hasattr(self, "proxy"):
-            disconnect_proxy(self.proxy)
-            delattr(self, "proxy")
+        if hasattr(self, "player_proxy"):
+            disconnect_proxy(self.player_proxy)
+            delattr(self, "player_proxy")
         if hasattr(self, "propertiesproxy"):
-            disconnect_proxy(self.propertiesproxy)
+            disconnect_proxy(self.properties_proxy)
             delattr(self, "propertiesproxy")
 
     def __del__(self) -> None:
@@ -91,28 +110,44 @@ class Player(GObject.GObject):
         self.emit("metadata-changed", self.metadata)
 
     def play(self) -> None:
-        if hasattr(self, "proxy"):
-            self.proxy.Play()
+        if hasattr(self, "player_proxy"):
+            try:
+
+                self.player_proxy.Play()
+            except Exception:
+                _LOGGER.exception("shit")
+                raise
 
     def pause(self) -> None:
-        if hasattr(self, "proxy"):
-            self.proxy.Pause()
+        if hasattr(self, "player_proxy"):
+            self.player_proxy.Pause()
 
     def stop(self) -> None:
-        if hasattr(self, "proxy"):
-            self.proxy.Stop()
+        if hasattr(self, "player_proxy"):
+            self.player_proxy.Stop()
 
     def next(self) -> None:
-        if hasattr(self, "proxy"):
-            self.proxy.Next()
+        if hasattr(self, "player_proxy"):
+            self.player_proxy.Next()
 
     def previous(self) -> None:
-        if hasattr(self, "proxy"):
-            self.proxy.Previous()
+        if hasattr(self, "player_proxy"):
+            self.player_proxy.Previous()
 
 
 def is_mpris(bus_name: str) -> bool:
     return bus_name.startswith("org.mpris.MediaPlayer2")
+
+
+def lookup_player(d: Dict[str, Player], i: str) -> Player:
+    try:
+        p = d[i]
+        return p
+    except KeyError:
+        for p in d.values():
+            if p.identity == i:
+                return p
+        raise
 
 
 class DBusMPRISInterface(threading.Thread, GObject.GObject):
@@ -120,22 +155,22 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         "player-appeared": (
             GObject.SignalFlags.RUN_LAST,
             None,
-            (str,),
+            (GObject.TYPE_PYOBJECT,),
         ),
         "player-gone": (
             GObject.SignalFlags.RUN_LAST,
             None,
-            (str,),
+            (GObject.TYPE_PYOBJECT,),
         ),
         "player-playback-status-changed": (
             GObject.SignalFlags.RUN_LAST,
             None,
-            (str, str),
+            (GObject.TYPE_PYOBJECT, str),
         ),
         "player-metadata-changed": (
             GObject.SignalFlags.RUN_LAST,
             None,
-            (str, GObject.TYPE_PYOBJECT),
+            (GObject.TYPE_PYOBJECT, GObject.TYPE_PYOBJECT),
         ),
         "mpris-shutdown": (
             GObject.SignalFlags.RUN_LAST,
@@ -168,10 +203,9 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         if is_mpris(bus_name):
             if not new_owner:
                 # is gone
-                emit = False
+                m: Optional[Player] = None
                 with self.players_lock:
                     if old_owner in self.players:
-                        emit = True
                         try:
                             self.players[old_owner].disconnect_by_func(
                                 self._player_playback_status_changed
@@ -184,15 +218,15 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                             )
                         except ImportError:
                             pass
+                        m = self.players[old_owner]
                         del self.players[old_owner]
-                if emit:
-                    self.emit("player-gone", old_owner)
+                if m:
+                    self.emit("player-gone", m)
             if not old_owner:
                 # is new
-                emit = False
+                m = None
                 with self.players_lock:
                     if new_owner not in self.players:
-                        emit = True
                         self.players[new_owner] = Player(self.bus, new_owner)
                         self.players[new_owner].connect(
                             "playback-status-changed",
@@ -202,20 +236,21 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                             "metadata-changed",
                             self._player_metadata_changed,
                         )
-                if emit:
-                    self.emit("player-appeared", new_owner)
+                        m = self.players[new_owner]
+                if m:
+                    self.emit("player-appeared", m)
 
     def _player_playback_status_changed(
         self,
         player: Player,
         status: str,
     ) -> None:
-        self.emit("player-playback-status-changed", player.player_id, status)
+        self.emit("player-playback-status-changed", player, status)
 
     def _player_metadata_changed(
         self, player: Player, metadata: Dict[str, Any]
     ) -> None:
-        self.emit("player-metadata-changed", player.player_id, metadata)
+        self.emit("player-metadata-changed", player, metadata)
 
     def _initialize_existing_names(self) -> None:
         names = self.proxy.ListNames()
@@ -245,34 +280,34 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         self.join()
         print("Quit loop")
 
-    def get_players(self) -> Dict[str, Player]:
+    def get_players(self) -> List[Player]:
         with self.players_lock:
-            return dict(self.players.items())
+            return list(self.players.values())
 
-    def play(self, player_id: str) -> None:
+    def play(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            self.players[player_id].play()
+            lookup_player(self.players, identity_or_player_id).play()
 
-    def pause(self, player_id: str) -> None:
+    def pause(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            self.players[player_id].pause()
+            lookup_player(self.players, identity_or_player_id).pause()
 
-    def stop(self, player_id: str) -> None:
+    def stop(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            self.players[player_id].stop()
+            lookup_player(self.players, identity_or_player_id).stop()
 
-    def next(self, player_id: str) -> None:
+    def next(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            self.players[player_id].next()
+            lookup_player(self.players, identity_or_player_id).next()
 
-    def previous(self, player_id: str) -> None:
+    def previous(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            self.players[player_id].previous()
+            lookup_player(self.players, identity_or_player_id).previous()
 
 
 if __name__ == "__main__":

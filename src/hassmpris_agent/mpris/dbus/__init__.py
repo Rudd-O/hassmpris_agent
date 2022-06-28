@@ -6,6 +6,7 @@ from dasbus.loop import EventLoop
 from dasbus.connection import SessionMessageBus
 from dasbus.client.proxy import disconnect_proxy
 import threading
+from hassmpris_agent.mpris.dbus.chromium import ChromiumObjectHandler
 
 import gi
 
@@ -67,7 +68,11 @@ class Player(GObject.GObject):
         self.playback_status: str = allplayerprops["PlaybackStatus"]
         self.metadata: str = allplayerprops["Metadata"]
 
-        kw = {}
+        kw = (
+            {"handler_factory": ChromiumObjectHandler}
+            if self.identity.lower().startswith("chrom")
+            else {}
+        )
         self.player_proxy = bus.get_proxy(
             player_id,
             "/org/mpris/MediaPlayer2",

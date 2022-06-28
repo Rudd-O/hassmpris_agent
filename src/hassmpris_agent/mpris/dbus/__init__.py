@@ -1,10 +1,13 @@
 import logging
-from typing import Dict, Any, Optional, List
+import time
+
+
+from typing import Dict, Any, Optional, List, cast
 
 from dasbus.typing import get_native
 from dasbus.loop import EventLoop
 from dasbus.connection import SessionMessageBus
-from dasbus.client.proxy import disconnect_proxy
+from dasbus.client.proxy import disconnect_proxy, InterfaceProxy
 import threading
 from hassmpris_agent.mpris.dbus.chromium import ChromiumObjectHandler
 
@@ -28,6 +31,7 @@ def unpack(obj: Any) -> Any:
 
 
 class Player(GObject.GObject):
+
     __gsignals__ = {
         "playback-status-changed": (
             GObject.SignalFlags.RUN_LAST,
@@ -47,14 +51,21 @@ class Player(GObject.GObject):
     def __init__(self, bus: SessionMessageBus, player_id: str) -> None:
         GObject.GObject.__init__(self)
         self.player_id = player_id
-        self.properties_proxy = bus.get_proxy(
-            player_id,
-            "/org/mpris/MediaPlayer2",
-            interface_name="org.freedesktop.DBus.Properties",
+        self.properties_proxy = cast(
+            InterfaceProxy,
+            bus.get_proxy(
+                player_id,
+                "/org/mpris/MediaPlayer2",
+                interface_name="org.freedesktop.DBus.Properties",
+            ),
         )
-        allprops = unpack(
-            self.properties_proxy.GetAll("org.mpris.MediaPlayer2"),
-        )
+        time.sleep(0.1)
+
+        _LOGGER.debug("entering potential hang by getting properties")
+        x = self.properties_proxy.GetAll("org.mpris.MediaPlayer2")
+        _LOGGER.debug("potential hang by getting properties avoided")
+
+        allprops = unpack(x)
         self.identity: str = allprops.get(
             "Identity",
             allprops.get(
@@ -62,6 +73,7 @@ class Player(GObject.GObject):
                 self.player_id,
             ),
         )
+
         allplayerprops = unpack(
             self.properties_proxy.GetAll("org.mpris.MediaPlayer2.Player"),
         )
@@ -88,9 +100,12 @@ class Player(GObject.GObject):
         if hasattr(self, "player_proxy"):
             disconnect_proxy(self.player_proxy)
             delattr(self, "player_proxy")
-        if hasattr(self, "propertiesproxy"):
+        if hasattr(self, "properties_proxy"):
+            self.properties_proxy.PropertiesChanged.disconnect(
+                self._properties_changed,
+            )
             disconnect_proxy(self.properties_proxy)
-            delattr(self, "propertiesproxy")
+            delattr(self, "properties_proxy")
 
     def __del__(self) -> None:
         self.cleanup()
@@ -255,9 +270,13 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                             )
                         except ImportError:
                             pass
+                        m.cleanup()
                         self.players.remove(m)
                 if m:
-                    self.emit("player-gone", m)
+                    self.emit(
+                        "player-gone",
+                        m,
+                    )
             if not old_owner:
                 # is new
                 m = None
@@ -273,19 +292,30 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                             self._player_metadata_changed,
                         )
                 if m:
-                    self.emit("player-appeared", m)
+                    self.emit(
+                        "player-appeared",
+                        m,
+                    )
 
     def _player_playback_status_changed(
         self,
         player: Player,
         status: str,
     ) -> None:
-        self.emit("player-playback-status-changed", player, status)
+        self.emit(
+            "player-playback-status-changed",
+            player,
+            status,
+        )
 
     def _player_metadata_changed(
         self, player: Player, metadata: Dict[str, Any]
     ) -> None:
-        self.emit("player-metadata-changed", player, metadata)
+        self.emit(
+            "player-metadata-changed",
+            player,
+            metadata,
+        )
 
     def _initialize_existing_names(self) -> None:
         names = self.proxy.ListNames()
@@ -297,23 +327,20 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
 
     def run(self) -> None:
         self.proxy.NameOwnerChanged.connect(self._name_owner_changed)
-        GLib.idle_add(self._initialize_existing_names)
+        GLib.idle_add(lambda: self._initialize_existing_names())
         self.loop.run()
-        print("Loop ended")
 
     def stop_(self) -> None:
-        print("Grabbing lock")
         with self.players_lock:
-            print("Grabbed lock")
             for player in list(self.players.values()):
                 self.players.remove(player)
                 player.cleanup()
-        print("Quitting loop")
+        _LOGGER.debug("Quitting loop")
         self.emit("mpris-shutdown")
         self.loop.quit()
-        print("Joining thread")
+        _LOGGER.debug("Joining thread")
         self.join()
-        print("Quit loop")
+        _LOGGER.debug("Quit loop")
 
     def get_players(self) -> List[Player]:
         with self.players_lock:

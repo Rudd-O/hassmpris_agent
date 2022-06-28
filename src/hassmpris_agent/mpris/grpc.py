@@ -209,6 +209,7 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         for player in self.mpris.get_players():
             m = playerappearedmessage(player)
             q.put(m)
+        q.put(mpris_pb2.MPRISUpdateReply())
         with self.queues_lock:
             self.queues.append(q)
             _LOGGER.info("Clients connected now: %d", len(self.queues))

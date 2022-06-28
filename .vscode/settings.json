@@ -13,5 +13,6 @@
         "${workspaceFolder}/../shortauthstrings/src",
         "${workspaceFolder}/../hassmpris/src",
         "${workspaceFolder}/../cakes/src"
-    ]
+    ],
+    "python.terminal.activateEnvInCurrentTerminal": false
 }

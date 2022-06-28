@@ -144,15 +144,46 @@ def is_mpris(bus_name: str) -> bool:
     return bus_name.startswith("org.mpris.MediaPlayer2")
 
 
-def lookup_player(d: Dict[str, Player], i: str) -> Player:
-    try:
-        p = d[i]
-        return p
-    except KeyError:
-        for p in d.values():
+class PlayerCollection(Dict[str, Player]):
+    def lookup_by_identity(self, i: str) -> Player:
+        for p in self.values():
             if p.identity == i:
                 return p
-        raise
+        raise KeyError(i)
+
+    def lookup(self, i: str) -> Player:
+        try:
+            p = self[i]
+            return p
+        except KeyError:
+            return self.lookup_by_identity(i)
+
+    def add(self, bus: SessionMessageBus, player_id: str) -> Player:
+        p = Player(bus, player_id)
+
+        def already(s: str) -> bool:
+            try:
+                self.lookup_by_identity(s)
+                return True
+            except KeyError:
+                return False
+
+        pattern = p.identity.replace("%", "%%") + " (%d)"
+        if already(p.identity):
+            count = 1
+            while True:
+                count = count + 1
+                newidentity = pattern % count
+                if already(newidentity):
+                    continue
+                p.identity = newidentity
+                break
+
+        self[player_id] = p
+        return p
+
+    def remove(self, player: Player) -> None:
+        del self[player.player_id]
 
 
 class DBusMPRISInterface(threading.Thread, GObject.GObject):
@@ -192,7 +223,7 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         self.loop = EventLoop()
         self.bus = SessionMessageBus()
         self.players_lock = threading.RLock()
-        self.players: Dict[str, Player] = dict()
+        self.players = PlayerCollection()
         self.proxy = self.bus.get_proxy(
             "org.freedesktop.DBus",
             "/org/freedesktop/DBus",
@@ -211,20 +242,20 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                 m: Optional[Player] = None
                 with self.players_lock:
                     if old_owner in self.players:
-                        try:
-                            self.players[old_owner].disconnect_by_func(
-                                self._player_playback_status_changed
-                            )
-                        except ImportError:
-                            pass
-                        try:
-                            self.players[old_owner].disconnect_by_func(
-                                self._player_metadata_changed
-                            )
-                        except ImportError:
-                            pass
                         m = self.players[old_owner]
-                        del self.players[old_owner]
+                        try:
+                            m.disconnect_by_func(
+                                self._player_playback_status_changed,
+                            )
+                        except ImportError:
+                            pass
+                        try:
+                            m.disconnect_by_func(
+                                self._player_metadata_changed,
+                            )
+                        except ImportError:
+                            pass
+                        self.players.remove(m)
                 if m:
                     self.emit("player-gone", m)
             if not old_owner:
@@ -232,16 +263,15 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                 m = None
                 with self.players_lock:
                     if new_owner not in self.players:
-                        self.players[new_owner] = Player(self.bus, new_owner)
-                        self.players[new_owner].connect(
+                        m = self.players.add(self.bus, new_owner)
+                        m.connect(
                             "playback-status-changed",
                             self._player_playback_status_changed,
                         )
-                        self.players[new_owner].connect(
+                        m.connect(
                             "metadata-changed",
                             self._player_metadata_changed,
                         )
-                        m = self.players[new_owner]
                 if m:
                     self.emit("player-appeared", m)
 
@@ -275,8 +305,8 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         print("Grabbing lock")
         with self.players_lock:
             print("Grabbed lock")
-            for name, player in list(self.players.items()):
-                del self.players[name]
+            for player in list(self.players.values()):
+                self.players.remove(player)
                 player.cleanup()
         print("Quitting loop")
         self.emit("mpris-shutdown")
@@ -292,27 +322,27 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
     def play(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            lookup_player(self.players, identity_or_player_id).play()
+            self.players.lookup(identity_or_player_id).play()
 
     def pause(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            lookup_player(self.players, identity_or_player_id).pause()
+            self.players.lookup(identity_or_player_id).pause()
 
     def stop(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            lookup_player(self.players, identity_or_player_id).stop()
+            self.players.lookup(identity_or_player_id).stop()
 
     def next(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            lookup_player(self.players, identity_or_player_id).next()
+            self.players.lookup(identity_or_player_id).next()
 
     def previous(self, identity_or_player_id: str) -> None:
         # May raise KeyError.
         with self.players_lock:
-            lookup_player(self.players, identity_or_player_id).previous()
+            self.players.lookup(identity_or_player_id).previous()
 
 
 if __name__ == "__main__":

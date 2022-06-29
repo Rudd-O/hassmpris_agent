@@ -118,12 +118,20 @@ class Player(GObject.GObject):
     ) -> None:
         if "PlaybackStatus" in dict_of_properties:
             self._set_playback_status(dict_of_properties["PlaybackStatus"])
+        elif "PlaybackStatus" in invalidated_properties:
+            self._set_playback_status("stopped")
+
         if "Metadata" in dict_of_properties:
             self._set_metadata(dict_of_properties["Metadata"])
+            self._set_playback_status(self.player_proxy.PlaybackStatus)
+        elif "Metadata" in invalidated_properties:
+            self._set_metadata({})
 
     def _set_playback_status(self, playback_status: GLib.Variant) -> None:
-        self.playback_status = unpack(playback_status)
-        self.emit("playback-status-changed", self.playback_status)
+        pbstatus = unpack(playback_status)
+        if pbstatus != self.playback_status:
+            self.playback_status = pbstatus
+            self.emit("playback-status-changed", self.playback_status)
 
     def _set_metadata(self, metadata: GLib.Variant) -> None:
         self.metadata = unpack(metadata)

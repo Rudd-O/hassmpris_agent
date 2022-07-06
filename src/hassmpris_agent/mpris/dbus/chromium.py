@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from dasbus.client.handler import ClientObjectHandler
 from dasbus.specification import DBusSpecification
@@ -58,6 +58,8 @@ chromium_dbus_interface = """
     <property name="CanPlay" type="b" access="read" />
     <property name="CanPause" type="b" access="read" />
     <property name="CanSeek" type="b" access="read" />
+    <property name="CanGoNext" type="b" access="read" />
+    <property name="CanGoPrevious" type="b" access="read" />
     <method name="Next" />
     <method name="Previous" />
     <method name="Pause" />
@@ -91,3 +93,22 @@ class ChromiumObjectHandler(ClientObjectHandler):
 
     def create_member(self, *a: Any, **kw: Any) -> Any:
         return ClientObjectHandler.create_member(self, *a, **kw)
+
+
+if __name__ == "__main__":
+    import sys
+    from dasbus.connection import SessionMessageBus
+    from dasbus.connection import InterfaceProxy
+
+    name = sys.argv[1]
+    bus = SessionMessageBus()
+    properties_proxy = cast(
+        InterfaceProxy,
+        bus.get_proxy(
+            name,
+            "/org/mpris/MediaPlayer2",
+            interface_name="org.freedesktop.DBus.Properties",
+        ),
+    )
+    x = properties_proxy.GetAll("org.mpris.MediaPlayer2.Player")
+    print(x)

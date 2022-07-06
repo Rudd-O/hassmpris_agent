@@ -27,7 +27,7 @@ from cryptography.x509 import Certificate
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from hassmpris.proto import mpris_pb2_grpc, mpris_pb2
-from hassmpris_agent.mpris.dbus import DBusMPRISInterface, Player
+from hassmpris_agent.mpris.dbus import DBusMPRISInterface, Player, ALL_PROPS
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,17 +50,15 @@ def metadata_to_json_metadata(metadata: Any) -> str:
 def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
     s = playback_status_to_PlayerStatus(player.playback_status)
     m = metadata_to_json_metadata(player.metadata)
+    props = {}
+    for prop in ALL_PROPS:
+        props[prop] = getattr(player, prop)
     return mpris_pb2.MPRISUpdateReply(
         player=mpris_pb2.MPRISPlayerUpdate(
             player_id=player.identity,
             status=s,
             json_metadata=m,
-            properties=mpris_pb2.MPRISPlayerProperties(
-                CanControl=player.CanControl,
-                CanSeek=player.CanSeek,
-                CanPause=player.CanPause,
-                CanPlay=player.CanPlay,
-            ),
+            properties=mpris_pb2.MPRISPlayerProperties(**props),
         )
     )
 
@@ -309,7 +307,7 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
             "Requested %s previous",
             request.player_id,
         )
-        self.mpris.next(request.player_id)
+        self.mpris.previous(request.player_id)
         return mpris_pb2.PlayerPreviousReply()
 
     def Ping(

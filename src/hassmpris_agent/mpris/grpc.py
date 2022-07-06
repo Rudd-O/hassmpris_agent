@@ -55,6 +55,12 @@ def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
             player_id=player.identity,
             status=s,
             json_metadata=m,
+            properties=mpris_pb2.MPRISPlayerProperties(
+                CanControl=player.CanControl,
+                CanSeek=player.CanSeek,
+                CanPause=player.CanPause,
+                CanPlay=player.CanPlay,
+            ),
         )
     )
 
@@ -119,6 +125,12 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
             mpris.connect(
                 "player-metadata-changed",
                 self._handle_player_metadata_changed,
+            ),
+        )
+        self.conns.append(
+            mpris.connect(
+                "player-property-changed",
+                self._handle_player_property_changed,
             ),
         )
         self.conns.append(
@@ -189,6 +201,30 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
             player=mpris_pb2.MPRISPlayerUpdate(
                 player_id=player.identity,
                 json_metadata=s,
+            )
+        )
+        self._push_to_queues(m)
+
+    def _handle_player_property_changed(
+        self,
+        unused_mpris: Any,
+        player: Player,
+        property_name: str,
+        property_value: Any,
+    ) -> None:
+        _LOGGER.debug(
+            "%s property changed: %s -> %s",
+            player.identity,
+            property_name,
+            property_value,
+        )
+        kws = {
+            property_name: property_value,
+        }
+        m = mpris_pb2.MPRISUpdateReply(
+            player=mpris_pb2.MPRISPlayerUpdate(
+                player_id=player.identity,
+                properties=mpris_pb2.MPRISPlayerProperties(**kws),
             )
         )
         self._push_to_queues(m)

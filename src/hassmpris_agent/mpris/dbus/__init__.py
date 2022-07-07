@@ -318,6 +318,11 @@ class Player(GObject.GObject):
         if hasattr(self, "control_proxy"):
             self.control_proxy.Previous()
 
+    def seek(self, position: float) -> None:
+        if hasattr(self, "control_proxy"):
+            p = round(position * 1000 * 1000)
+            self.control_proxy.Seek(p)
+
 
 def is_mpris(bus_name: str) -> bool:
     return bus_name.startswith("org.mpris.MediaPlayer2")
@@ -560,6 +565,11 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         # May raise KeyError.
         with self.players_lock:
             self.players.lookup(identity_or_player_id).previous()
+
+    def seek(self, identity_or_player_id: str, position: float) -> None:
+        # May raise KeyError.
+        with self.players_lock:
+            self.players.lookup(identity_or_player_id).seek(position)
 
 
 if __name__ == "__main__":

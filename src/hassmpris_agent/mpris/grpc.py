@@ -314,6 +314,25 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         self.mpris.previous(request.player_id)
         return mpris_pb2.PlayerPreviousReply()
 
+    @player_id_validated
+    @with_mpris
+    def Seek(
+        self,
+        request: mpris_pb2.SeekRequest,
+        context: grpc.ServicerContext,
+    ) -> mpris_pb2.SeekReply:
+        _LOGGER.debug(
+            "Requested %s seek to %s",
+            request.player_id,
+            request.position,
+        )
+        try:
+            self.mpris.seek(request.player_id, request.position)
+        except OverflowError as e:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        return mpris_pb2.SeekReply()
+
     def Ping(
         self, unused_request: Empty, unused_context: grpc.ServicerContext
     ) -> Empty:

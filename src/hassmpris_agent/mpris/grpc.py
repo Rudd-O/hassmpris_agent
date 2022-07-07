@@ -27,7 +27,11 @@ from cryptography.x509 import Certificate
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from hassmpris.proto import mpris_pb2_grpc, mpris_pb2
-from hassmpris_agent.mpris.dbus import DBusMPRISInterface, Player, ALL_PROPS
+from hassmpris_agent.mpris.dbus import (
+    DBusMPRISInterface,
+    Player,
+    ALL_CAN_PROPS,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,7 +55,7 @@ def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
     s = playback_status_to_PlayerStatus(player.playback_status)
     m = metadata_to_json_metadata(player.metadata)
     props = {}
-    for prop in ALL_PROPS:
+    for prop in ALL_CAN_PROPS:
         props[prop] = getattr(player, prop)
     return mpris_pb2.MPRISUpdateReply(
         player=mpris_pb2.MPRISPlayerUpdate(

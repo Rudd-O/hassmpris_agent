@@ -21,7 +21,7 @@ from gi.repository import GLib, GObject  # noqa
 
 _LOGGER = logging.getLogger(__name__)
 
-ALL_PROPS = [
+ALL_CAN_PROPS = [
     "CanControl",
     "CanPause",
     "CanPlay",
@@ -29,6 +29,8 @@ ALL_PROPS = [
     "CanGoNext",
     "CanGoPrevious",
 ]
+PROP_PLAYBACKSTATUS = "PlaybackStatus"
+PROP_METADATA = "Metadata"
 
 
 def deepequals(one: Any, two: Any) -> bool:
@@ -79,6 +81,8 @@ class Player(GObject.GObject):
 
     def __init__(self, bus: SessionMessageBus, player_id: str) -> None:
         GObject.GObject.__init__(self)
+        self._sources: list[int] = []
+
         self.player_id = player_id
         self.properties_proxy = cast(
             InterfaceProxy,
@@ -90,26 +94,23 @@ class Player(GObject.GObject):
         )
 
         # First, connect the signal to the properties proxy.
+        _LOGGER.debug("entering potential hang by getting properties")
         try:
+            time.sleep(0.05)
             self.properties_proxy.PropertiesChanged.connect(
                 self._properties_changed,
             )
         except DBusError as e:
             raise BadPlayer from e
+        _LOGGER.debug("potential hang by getting properties avoided")
 
         try:
-            _LOGGER.debug("entering potential hang by getting properties")
-            time.sleep(0.1)
             try:
                 allprops_variant = self.properties_proxy.GetAll(
                     "org.mpris.MediaPlayer2"
                 )
-                allplayerprops_variant = self.properties_proxy.GetAll(
-                    "org.mpris.MediaPlayer2.Player",
-                )
             except DBusError as e:
                 raise BadPlayer from e
-            _LOGGER.debug("potential hang by getting properties avoided")
 
             allprops = unpack(allprops_variant)
             self.identity: str = allprops.get(
@@ -140,18 +141,16 @@ class Player(GObject.GObject):
                 disconnect_proxy(self.control_proxy)
             raise
 
-        allplayerprops = unpack(allplayerprops_variant)
-        self.playback_status: str = allplayerprops["PlaybackStatus"]
-        self.metadata: str = allplayerprops["Metadata"]
-        for prop in ALL_PROPS:
-            setattr(self, prop, allplayerprops.get(prop, False))
+        self._set_player_properties(
+            emit=False,
+        )
 
     def cleanup(self) -> None:
         if hasattr(self, "control_proxy"):
             try:
                 disconnect_proxy(self.control_proxy)
-            except ImportError:
-                # Python is shutting down.
+            except (ImportError, DBusError):
+                # Python or the MPRIS bus owner is shutting down.
                 pass
             delattr(self, "control_proxy")
         if hasattr(self, "properties_proxy"):
@@ -160,8 +159,8 @@ class Player(GObject.GObject):
                     self._properties_changed,
                 )
                 disconnect_proxy(self.properties_proxy)
-            except ImportError:
-                # Python is shutting down.
+            except (ImportError, DBusError):
+                # Python or the MPRIS bus owner is shutting down.
                 pass
             delattr(self, "properties_proxy")
 
@@ -171,47 +170,115 @@ class Player(GObject.GObject):
     def _properties_changed(
         self,
         unused_iface: Any,
-        dict_of_properties: Dict[str, Any],
+        propdict: Dict[str, Any],
         invalidated_properties: Any,
     ) -> None:
+        handled: dict[str, Any] = {}
+
+        if PROP_PLAYBACKSTATUS in propdict:
+            handled[PROP_PLAYBACKSTATUS] = propdict[PROP_PLAYBACKSTATUS]
+            del propdict[PROP_PLAYBACKSTATUS]
+        elif PROP_PLAYBACKSTATUS in invalidated_properties:
+            handled[PROP_PLAYBACKSTATUS] = GLib.Variant("s", "Stopped")
+            invalidated_properties.remove(PROP_PLAYBACKSTATUS)
+
+        if PROP_METADATA in propdict:
+            handled[PROP_METADATA] = propdict[PROP_METADATA]
+            del propdict[PROP_METADATA]
+        elif PROP_METADATA in invalidated_properties:
+            handled[PROP_METADATA] = {}
+            invalidated_properties.remove(PROP_METADATA)
+
+        for prop in ALL_CAN_PROPS:
+            if prop in propdict:
+                handled[prop] = propdict[prop]
+                del propdict[prop]
+            elif prop in invalidated_properties:
+                handled[prop] = False
+                invalidated_properties.remove(prop)
+
         # _LOGGER.debug(
-        #     "%s: properties changed: %s %s",
+        #     "%s: properties changed: %s",
         #     self.identity,
-        #     dict_of_properties,
+        # )
+        # _LOGGER.debug(
+        #     "%s: unhandled properties changed: %s %s",
+        #     self.identity,
+        #     propdict,
         #     invalidated_properties,
         # )
-        if "PlaybackStatus" in dict_of_properties:
-            self._set_playback_status(dict_of_properties["PlaybackStatus"])
+
+        # Call the property updates now.
+        self._set_player_properties(
+            emit=True,
+            allplayerprops_variant=handled,
+        )
+
+        # Now queue update CanPlay and other properties since some players
+        # like VLC sometimes neglect to do so.  We basically wait 50 ms
+        # and then query the properties again.
+        self._delayed_property_update()
+
+    def _delayed_property_update(self) -> None:
+        mysource: list[int] = []
+
+        def inner() -> None:
             try:
-                # Opportunistically update CanPlay since some players like VLC
-                # neglect to do so.
-                self._set_property("CanPlay", self.control_proxy.CanPlay)
-                self._set_property("CanPause", self.control_proxy.CanPause)
+                self._set_player_properties(emit=True)
             except DBusError:
-                # Ah.  The player exited at the time of doing this query.
-                # We ignore the situation here.
+                # Player is gone:
                 pass
-        elif "PlaybackStatus" in invalidated_properties:
-            self._set_playback_status("Stopped")
+            for source in mysource:
+                GLib.source_remove(source)
+                if source in self._sources:
+                    self._sources.remove(source)
 
-        for prop in ALL_PROPS:
-            if prop in dict_of_properties:
-                self._set_property(prop, dict_of_properties[prop])
-            elif prop in invalidated_properties:
-                self._set_property(prop, False)
+        for source in self._sources:
+            GLib.source_remove(source)
+        self._sources = []
+        source = GLib.timeout_add(50, inner)
+        self._sources.append(source)
+        mysource.append(source)
 
-        if "Metadata" in dict_of_properties:
-            self._set_metadata(dict_of_properties["Metadata"])
+    def _set_player_properties(
+        self,
+        emit: bool = True,
+        allplayerprops_variant: Any | None = None,
+    ) -> None:
+        if not allplayerprops_variant:
+            if not hasattr(self, "properties_proxy"):
+                return
             try:
-                # Opportunistically update playback status since some players
-                # neglect to do so.
-                pbstatus = self.control_proxy.PlaybackStatus
-            except DBusError:
-                # Ah.  The player exited at the time of doing this query.
-                pbstatus = GLib.Variant("s", "Stopped")
-            self._set_playback_status(pbstatus)
-        elif "Metadata" in invalidated_properties:
-            self._set_metadata({})
+                allplayerprops_variant = self.properties_proxy.GetAll(
+                    "org.mpris.MediaPlayer2.Player",
+                )
+            except DBusError as e:
+                raise BadPlayer from e
+        if emit:
+            if PROP_METADATA in allplayerprops_variant:
+                self._set_metadata(
+                    allplayerprops_variant[PROP_METADATA],
+                )
+            if PROP_PLAYBACKSTATUS in allplayerprops_variant:
+                self._set_playback_status(
+                    allplayerprops_variant[PROP_PLAYBACKSTATUS],
+                )
+            for prop in ALL_CAN_PROPS:
+                if prop in allplayerprops_variant:
+                    self._set_property(prop, allplayerprops_variant[prop])
+        else:
+            # This branch is only called upon object initialization.
+            # Accordingly, since we assume we are getting all the player
+            # properties known through D-Bus, then we take the liberty
+            # of updating all even with default values.
+            allplayerprops = unpack(allplayerprops_variant)
+            self.playback_status: str = allplayerprops.get(
+                PROP_PLAYBACKSTATUS,
+                "Stopped",
+            )
+            self.metadata: str = allplayerprops.get(PROP_METADATA, {})
+            for prop in ALL_CAN_PROPS:
+                setattr(self, prop, allplayerprops.get(prop, False))
 
     def _set_playback_status(self, playback_status: GLib.Variant) -> None:
         pbstatus = unpack(playback_status)
@@ -497,7 +564,7 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
 
 if __name__ == "__main__":
     o = {
-        "Metadata": GLib.Variant(
+        PROP_METADATA: GLib.Variant(
             "a{sv}", {"abc": GLib.Variant("i", 1), "def": GLib.Variant("i", 2)}
         )
     }

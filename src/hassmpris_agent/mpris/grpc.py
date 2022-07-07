@@ -292,27 +292,27 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
 
     @player_id_validated
     @with_mpris
-    def PlayerNext(
+    def Next(
         self,
-        request: mpris_pb2.PlayerNextRequest,
+        request: mpris_pb2.NextRequest,
         context: grpc.ServicerContext,
-    ) -> mpris_pb2.PlayerNextReply:
+    ) -> mpris_pb2.NextReply:
         self.mpris.next(request.player_id)
-        return mpris_pb2.PlayerNextReply()
+        return mpris_pb2.NextReply()
 
     @player_id_validated
     @with_mpris
-    def PlayerPrevious(
+    def Previous(
         self,
-        request: mpris_pb2.PlayerPreviousRequest,
+        request: mpris_pb2.PreviousRequest,
         context: grpc.ServicerContext,
-    ) -> mpris_pb2.PlayerPreviousReply:
+    ) -> mpris_pb2.PreviousReply:
         _LOGGER.debug(
             "Requested %s previous",
             request.player_id,
         )
         self.mpris.previous(request.player_id)
-        return mpris_pb2.PlayerPreviousReply()
+        return mpris_pb2.PreviousReply()
 
     @player_id_validated
     @with_mpris

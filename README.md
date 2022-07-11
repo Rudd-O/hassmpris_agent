@@ -26,8 +26,17 @@ firewall ports to allow communication from Home Assistant:
 
 Once the agent is running you can connect to your computer from Home Assistant.
 
-## Troubleshooting
+## Troubleshooting and help
 
 The [client utility available here](https://github.com/Rudd-O/hassmpris_client)
 will help you debug issues by allowing you to connect to the agent from your
 machine or another machine.
+
+If the agent is giving you trouble or not working as it's meant to, you may want
+to look at your system logs.  E.g. if running the agent under your desktop
+session, look at the log files for the session using `journalctl` or under the
+file `~/.xsession-errors`.  You should make a copy of any traceback of interest.
+
+### Found a bug or a traceback?
+
+Please report it in the [project's issue tracker](https://github.com/Rudd-O/hassmpris_agent/issues).

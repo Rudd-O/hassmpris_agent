@@ -12,6 +12,7 @@ from dasbus.connection import SessionMessageBus
 from dasbus.client.proxy import disconnect_proxy, InterfaceProxy
 import threading
 from hassmpris_agent.mpris.dbus.chromium import ChromiumObjectHandler
+from hassmpris_agent.mpris.dbus.vlc import VLCObjectHandler
 
 import gi
 
@@ -29,6 +30,11 @@ ALL_CAN_PROPS = [
     "CanGoNext",
     "CanGoPrevious",
 ]
+ALL_NUMERIC_PROPS = {
+    "Rate": 1.0,
+    "MinimumRate": 1.0,
+    "MaximumRate": 1.0,
+}
 PROP_PLAYBACKSTATUS = "PlaybackStatus"
 PROP_METADATA = "Metadata"
 
@@ -94,24 +100,26 @@ class Player(GObject.GObject):
         )
 
         # First, connect the signal to the properties proxy.
-        _LOGGER.debug("entering potential hang by getting properties")
         try:
+            _LOGGER.debug("entering potential hang by getting properties")
             time.sleep(0.05)
             self.properties_proxy.PropertiesChanged.connect(
                 self._properties_changed,
             )
+            _LOGGER.debug("potential hang by getting properties avoided")
         except DBusError as e:
+            self.cleanup()
             raise BadPlayer from e
-        _LOGGER.debug("potential hang by getting properties avoided")
 
         try:
-            try:
-                allprops_variant = self.properties_proxy.GetAll(
-                    "org.mpris.MediaPlayer2"
-                )
-            except DBusError as e:
-                raise BadPlayer from e
+            allprops_variant = self.properties_proxy.GetAll(
+                "org.mpris.MediaPlayer2",
+            )
+        except DBusError as e:
+            self.cleanup()
+            raise BadPlayer from e
 
+        try:
             allprops = unpack(allprops_variant)
             self.identity: str = allprops.get(
                 "Identity",
@@ -121,24 +129,23 @@ class Player(GObject.GObject):
                 ),
             )
 
-            kw = (
-                {"handler_factory": ChromiumObjectHandler}
-                if self.identity.lower().startswith("chrom")
-                else {}
-            )
-            self.control_proxy = bus.get_proxy(
-                player_id,
-                "/org/mpris/MediaPlayer2",
-                interface_name="org.mpris.MediaPlayer2.Player",
-                **kw,
+            kw = {}
+            if self.identity.lower().startswith("chrom"):
+                kw["handler_factory"] = ChromiumObjectHandler
+            if "vlc" in self.identity.lower():
+                kw["handler_factory"] = VLCObjectHandler
+
+            self.control_proxy = cast(
+                InterfaceProxy,
+                bus.get_proxy(
+                    player_id,
+                    "/org/mpris/MediaPlayer2",
+                    interface_name="org.mpris.MediaPlayer2.Player",
+                    **kw,
+                ),
             )
         except Exception:
-            self.properties_proxy.PropertiesChanged.disconnect(
-                self._properties_changed,
-            )
-            disconnect_proxy(self.properties_proxy)
-            if hasattr(self, "control_proxy"):
-                disconnect_proxy(self.control_proxy)
+            self.cleanup()
             raise
 
         self._set_player_properties(
@@ -153,6 +160,7 @@ class Player(GObject.GObject):
                 # Python or the MPRIS bus owner is shutting down.
                 pass
             delattr(self, "control_proxy")
+
         if hasattr(self, "properties_proxy"):
             try:
                 self.properties_proxy.PropertiesChanged.disconnect(
@@ -189,7 +197,7 @@ class Player(GObject.GObject):
             handled[PROP_METADATA] = {}
             invalidated_properties.remove(PROP_METADATA)
 
-        for prop in ALL_CAN_PROPS:
+        for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
             if prop in propdict:
                 handled[prop] = propdict[prop]
                 del propdict[prop]
@@ -197,16 +205,24 @@ class Player(GObject.GObject):
                 handled[prop] = False
                 invalidated_properties.remove(prop)
 
-        # _LOGGER.debug(
-        #     "%s: properties changed: %s",
-        #     self.identity,
-        # )
-        # _LOGGER.debug(
-        #     "%s: unhandled properties changed: %s %s",
-        #     self.identity,
-        #     propdict,
-        #     invalidated_properties,
-        # )
+        if propdict:
+            dump = json.dumps(
+                unpack(propdict),
+                sort_keys=True,
+                indent=4,
+            ).splitlines()
+            for line in dump:
+                _LOGGER.debug(
+                    "%s: unhandled properties changed: %s",
+                    self.identity,
+                    line,
+                )
+        if invalidated_properties:
+            _LOGGER.debug(
+                "%s: unhandled properties invalidated: %s",
+                self.identity,
+                invalidated_properties,
+            )
 
         # Call the property updates now.
         self._set_player_properties(
@@ -263,7 +279,7 @@ class Player(GObject.GObject):
                 self._set_playback_status(
                     allplayerprops_variant[PROP_PLAYBACKSTATUS],
                 )
-            for prop in ALL_CAN_PROPS:
+            for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
                 if prop in allplayerprops_variant:
                     self._set_property(prop, allplayerprops_variant[prop])
         else:
@@ -279,6 +295,8 @@ class Player(GObject.GObject):
             self.metadata: str = allplayerprops.get(PROP_METADATA, {})
             for prop in ALL_CAN_PROPS:
                 setattr(self, prop, allplayerprops.get(prop, False))
+            for prop, defval in ALL_NUMERIC_PROPS.items():
+                setattr(self, prop, allplayerprops.get(prop, defval))
 
     def _set_playback_status(self, playback_status: GLib.Variant) -> None:
         pbstatus = unpack(playback_status)
@@ -367,6 +385,12 @@ class PlayerCollection(Dict[str, Player]):
         return p
 
     def remove(self, player: Player) -> None:
+        # The following cleanup event is important because
+        # otherwise the Player is never cleaned up (its own
+        # seek controller retains a reference to it).
+        # FIXME: figure out how to solve that problem without
+        # explicit cleanups like these.
+        player.cleanup()
         del self[player.player_id]
 
 
@@ -444,7 +468,6 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                             )
                         except ImportError:
                             pass
-                        m.cleanup()
                         self.players.remove(m)
                 if m:
                     self.emit(
@@ -471,8 +494,12 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
                                 self._player_metadata_changed,
                             )
                         except BadPlayer:
-                            s = "Ignoring %s — badly implemented D-Bus spec"
-                            _LOGGER.exception(s, new_owner)
+                            msg = (
+                                f"Ignoring player {new_owner} — probably badly"
+                                " implemented D-Bus spec; please report this"
+                                " traceback as a bug (see README.md)."
+                            )
+                            _LOGGER.exception(msg)
                 if m:
                     self.emit(
                         "player-appeared",
@@ -529,7 +556,6 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
         with self.players_lock:
             for player in list(self.players.values()):
                 self.players.remove(player)
-                player.cleanup()
         _LOGGER.debug("Quitting loop")
         self.emit("mpris-shutdown")
         self.loop.quit()

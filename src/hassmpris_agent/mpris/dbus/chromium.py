@@ -75,6 +75,9 @@ chromium_dbus_interface = """
       <arg type="o" direction="in" />
       <arg type="x" direction="in" />
     </method>
+    <signal name="Seeked">
+      <arg type="x"/>
+    </signal>
   </interface>
 </node>
 """

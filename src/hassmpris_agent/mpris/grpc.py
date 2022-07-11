@@ -31,6 +31,7 @@ from hassmpris_agent.mpris.dbus import (
     DBusMPRISInterface,
     Player,
     ALL_CAN_PROPS,
+    ALL_NUMERIC_PROPS,
 )
 
 
@@ -55,7 +56,7 @@ def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
     s = playback_status_to_PlayerStatus(player.playback_status)
     m = metadata_to_json_metadata(player.metadata)
     props = {}
-    for prop in ALL_CAN_PROPS:
+    for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
         props[prop] = getattr(player, prop)
     return mpris_pb2.MPRISUpdateReply(
         player=mpris_pb2.MPRISPlayerUpdate(

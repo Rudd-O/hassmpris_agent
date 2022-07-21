@@ -32,6 +32,9 @@ from hassmpris_agent.mpris.dbus import (
     Player,
     ALL_CAN_PROPS,
     ALL_NUMERIC_PROPS,
+    STATUS_STOPPED,
+    STATUS_PAUSED,
+    STATUS_PLAYING,
 )
 
 
@@ -40,11 +43,11 @@ _LOGGER = logging.getLogger(__name__)
 
 def playback_status_to_PlayerStatus(playback_status: str) -> int:
     map = {
-        "playing": mpris_pb2.PlayerStatus.PLAYING,
-        "paused": mpris_pb2.PlayerStatus.PAUSED,
-        "stopped": mpris_pb2.PlayerStatus.STOPPED,
+        STATUS_PLAYING: mpris_pb2.PlayerStatus.PLAYING,
+        STATUS_PAUSED: mpris_pb2.PlayerStatus.PAUSED,
+        STATUS_STOPPED: mpris_pb2.PlayerStatus.STOPPED,
     }
-    s: int = map[playback_status.lower()]
+    s: int = map[playback_status]
     return s
 
 
@@ -56,14 +59,19 @@ def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
     s = playback_status_to_PlayerStatus(player.playback_status)
     m = metadata_to_json_metadata(player.metadata)
     props = {}
+    kwargs = {}
     for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
         props[prop] = getattr(player, prop)
+    position = player.get_position()
+    if position is not None and position != 0.0:
+        kwargs["seeked"] = mpris_pb2.MPRISPlayerSeeked(position=position)
     return mpris_pb2.MPRISUpdateReply(
         player=mpris_pb2.MPRISPlayerUpdate(
             player_id=player.identity,
             status=s,
             json_metadata=m,
             properties=mpris_pb2.MPRISPlayerProperties(**props),
+            **kwargs,
         )
     )
 
@@ -137,7 +145,16 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
             ),
         )
         self.conns.append(
-            mpris.connect("mpris-shutdown", self._handle_mpris_shutdown),
+            mpris.connect(
+                "player-seeked",
+                self._handle_player_seeked,
+            ),
+        )
+        self.conns.append(
+            mpris.connect(
+                "mpris-shutdown",
+                self._handle_mpris_shutdown,
+            ),
         )
         self.queues: Deque[
             Queue[Optional[mpris_pb2.MPRISUpdateReply]]
@@ -183,7 +200,7 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         playback_status: str,
     ) -> None:
         s = playback_status_to_PlayerStatus(playback_status)
-        _LOGGER.debug("%s status changed: %s", player, s)
+        _LOGGER.debug("%s status changed: %s (%s)", player, s, playback_status)
         m = mpris_pb2.MPRISUpdateReply(
             player=mpris_pb2.MPRISPlayerUpdate(
                 player_id=player.identity,
@@ -228,6 +245,25 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
             player=mpris_pb2.MPRISPlayerUpdate(
                 player_id=player.identity,
                 properties=mpris_pb2.MPRISPlayerProperties(**kws),
+            )
+        )
+        self._push_to_queues(m)
+
+    def _handle_player_seeked(
+        self,
+        unused_mpris: Any,
+        player: Player,
+        position: float,
+    ) -> None:
+        _LOGGER.debug(
+            "%s seeked to %.2f",
+            player.identity,
+            position,
+        )
+        m = mpris_pb2.MPRISUpdateReply(
+            player=mpris_pb2.MPRISPlayerUpdate(
+                player_id=player.identity,
+                seeked=mpris_pb2.MPRISPlayerSeeked(position=position),
             )
         )
         self._push_to_queues(m)
@@ -323,16 +359,39 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         context: grpc.ServicerContext,
     ) -> mpris_pb2.SeekReply:
         _LOGGER.debug(
-            "Requested %s seek to %s",
+            "Requested %s seek %s seconds",
             request.player_id,
-            request.position,
+            request.offset,
         )
         try:
-            self.mpris.seek(request.player_id, request.position)
+            self.mpris.seek(request.player_id, request.offset)
         except OverflowError as e:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
 
         return mpris_pb2.SeekReply()
+
+    @player_id_validated
+    @with_mpris
+    def SetPosition(
+        self,
+        request: mpris_pb2.SetPositionRequest,
+        context: grpc.ServicerContext,
+    ) -> mpris_pb2.SetPositionReply:
+        _LOGGER.debug(
+            "Requested %s set position %s seconds",
+            request.player_id,
+            request.position,
+        )
+        try:
+            self.mpris.set_position(
+                request.player_id,
+                request.track_id,
+                request.position,
+            )
+        except OverflowError as e:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        return mpris_pb2.SetPositionReply()
 
     def Ping(
         self, unused_request: Empty, unused_context: grpc.ServicerContext

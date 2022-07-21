@@ -1,3 +1,5 @@
-support for showing position (seek is already implemented)
-support for features like Quit() and to launch "off" players too
-media enqueue and playlist management support
+* support for handling rate (I think in media_player.py it's called speed)
+* support for features like Quit() and to launch "off" players too
+* support for artist / album / singer / track number
+* support for media artwork
+* media enqueue and playlist management support

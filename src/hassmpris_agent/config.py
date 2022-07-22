@@ -12,18 +12,28 @@ def folder() -> str:
     )
 
 
-def program() -> str:
-    return os.path.join(
-        os.path.dirname(__file__),
-        "server.py",
-    )
+def program() -> list[str]:
+    if os.path.basename(sys.argv[0]).endswith(".py"):
+        return [
+            sys.executable,
+            os.path.join(
+                os.path.dirname(__file__),
+                "server.py",
+            ),
+        ]
+    else:
+        return [
+            os.path.join(
+                os.path.dirname(sys.argv[0]),
+                "hassmpris-agent",
+            )
+        ]
 
 
 def setup_autostart() -> None:
-    executable = shlex.quote(sys.executable)
-    path = shlex.quote(program())
+    exec_ = " ".join(shlex.quote(x) for x in program())
     text = f"""[Desktop Entry]
-Exec={executable} {path}
+Exec={exec_}
 Type=Application
 Terminal=false
 """

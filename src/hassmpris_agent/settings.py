@@ -272,7 +272,7 @@ class SettingsApplication(object):
 
     def start_service(self) -> None:
         run_and_supervise(
-            [sys.executable, cfg.program()],
+            cfg.program(),
             self.on_service_failure_start,
             [0, None],
         )

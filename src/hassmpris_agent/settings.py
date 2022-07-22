@@ -1,6 +1,5 @@
 import contextlib
 import subprocess
-import sys
 import threading
 
 from typing import Any, Tuple, cast, Generator, Callable, List, Optional

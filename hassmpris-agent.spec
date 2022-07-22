@@ -63,7 +63,8 @@ Requires:       libnotify
 %doc README.md
 %{_bindir}/hassmpris-agent
 %{_bindir}/hassmpris-settings
-
+%{_datadir}/applications/hassmpris-settings.desktop
+%{_datadir}/icons/*/scalable/apps/hassmpris-agent.svg
 
 %changelog
 * Thu Jun 16 2022 Manuel Amador <rudd-o@rudd-o.com> 0.1.0-1

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Exec=/usr/bin/python3 -m hassmpris_agent.settings
+Icon=hassmpris-agent
+Type=Application
+SingleMainWindow=true
+GenericName=Multimedia control from Home Assistant
+Name=MPRIS media control settings
+Comment=Integration tools between Home Assistant and your media players
+Categories=Settings;

@@ -1,5 +1,5 @@
 [Desktop Entry]
-Exec=/usr/bin/python3 -m hassmpris_agent.settings
+Exec=bash -c "if which hassmpris-settings >/dev/null 2>&1 ; then hassmpris-settings ; else /usr/bin/python3 -m hassmpris_agent.settings ; fi"
 Icon=hassmpris-agent
 Type=Application
 SingleMainWindow=true

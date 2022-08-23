@@ -40,3 +40,45 @@ file `~/.xsession-errors`.  You should make a copy of any traceback of interest.
 ### Found a bug or a traceback?
 
 Please report it in the [project's issue tracker](https://github.com/Rudd-O/hassmpris_agent/issues).
+
+## Technical information
+
+The MPRIS desktop agent is composed of two different servers:
+
+* An authentication server (listening on TCP port 40052).
+* An MPRIS gRPC server (listening on TCP port 40051).
+
+### The authentication server
+
+The authentication server doles out credentials for clients that
+want to connect to the MPRIS gRPC server.  It follows [the CAKES
+scheme documented in that project](https://github.com/Rudd-O/cakes)
+and implemented in the
+[reference HASS MPRIS client](https://github.com/Rudd-O/hassmpris-client).
+
+### The MPRIS gRPC server
+
+The MPRIS gRPC server provides an event-based interface to properly-
+authenticated clients, relaying status information as it happens
+to them via a bidirectional gRPC channel, and accepting commands
+for the media players running locally via that gRPC channel.
+
+This server implements a gRPC interface formalized in package
+[hassmpris](https://github.com/Rudd-O/hassmpris)
+([direct link to protobuf](https://github.com/Rudd-O/hassmpris/blob/master/src/hassmpris/proto/mpris.proto)).
+The protobuf interface documents what commands and properties are
+supported at any point in time, and the README.md file of that project
+contains useful information as well.
+
+### Interface between gRPC and desktop media players in the agent
+
+Bound to the gRPC server is a D-Bus interface listener that monitors
+media players and relays that information back to the gRPC server
+for broadcast to remote clients, as well as accepting command requests
+from the gRPC client and effecting those commands onto the media
+players of the system where this program runs.
+
+In addition to providing a command and event interface for MPRIS
+media players, the D-Bus interface listener also provides façades
+for certain media players that are not necessarily fully compliant
+with the MPRIS specification.

@@ -3,3 +3,7 @@
 * support for artist / album / singer / track number
 * support for media artwork
 * media enqueue and playlist management support
+* multi-user support (choose random ports and remember them)
+* support for mDNS / Avahi — with emphasis on multi-user support
+  * mDNS records should include a unique ID so that the published ports can be matched to an existing configuration
+  * the Home Assistant integration should make sense of it, updating the ports and reconnecting if that is the case)

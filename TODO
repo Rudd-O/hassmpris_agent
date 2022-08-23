@@ -5,6 +5,7 @@
 * media enqueue and playlist management support
 * multi-user support (choose random ports and remember them)
   * the UI should obviously display which ports it is using
-* support for mDNS / Avahi — with emphasis on multi-user support
-  * mDNS records should include a unique ID so that the published ports can be matched to an existing configuration
-  * the Home Assistant integration should make sense of it, updating the ports and reconnecting if that is the case)
+  * some server.py changes required to try a set of ports and
+    pick / remember the ones that succeeded, noting in the
+    UI which ports were picked, and properly announce these
+    ports via zeroconf

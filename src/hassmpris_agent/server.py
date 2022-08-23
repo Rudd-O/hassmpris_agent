@@ -1,11 +1,9 @@
+import asyncio
 import logging
 import os
 import shutil
 import signal
 import sys
-
-# FIXME: something is wrong with this, it hangs after several time
-# of being connected, perhaps the executors are getting swamped.
 
 # FIXME: the next line should be fixed when Fedora has
 # protoc 3.19.0 or later, and the protobufs need to be recompiled
@@ -25,6 +23,7 @@ from hassmpris_agent.control import (  # noqa: E402
 from hassmpris import config  # noqa: E402
 from hassmpris import certs  # noqa: E402
 from hassmpris_agent import verify  # noqa: E402
+from hassmpris_agent.autodiscovery import Publisher  # noqa: E402
 
 
 from queue import Queue  # noqa: E402
@@ -63,6 +62,9 @@ class Server(object):
             self.verify_peer,
         )
         self.dbus_control_iface = HASSMPRISControl()
+        mpris_port = int(mpris_listen_address.split(":")[-1])
+        cakes_port = int(cakes_listen_address.split(":")[-1])
+        self.discovery = Publisher(mpris_port, cakes_port)
 
     def verify_peer(
         self,
@@ -76,8 +78,10 @@ class Server(object):
         self.mpris_server.start()
         self.verification_ui.start()
         self.cakes_server.start()
+        asyncio.run(self.discovery.publish())
 
     def stop(self) -> None:
+        asyncio.run(self.discovery.unpublish())
         self.cakes_server.stop()
         self.verification_ui.stop()
         self.mpris_server.stop()

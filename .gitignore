@@ -8,3 +8,5 @@ build
 *.egg-info
 *.tar.gz
 *.rpm
+*.whl
+PKG-INFO

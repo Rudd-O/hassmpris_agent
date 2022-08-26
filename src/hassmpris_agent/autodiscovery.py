@@ -29,7 +29,7 @@ def get_ip_addresses() -> Tuple[list[Any], list[Any]]:
                 addresses.append(addr["addr"])
         if netifaces.AF_INET6 in addrs:
             for addr in addrs[netifaces.AF_INET6]:
-                ipv6_addresses.append(addr["addr"])
+                ipv6_addresses.append(addr["addr"].split("%")[0])
     return (addresses, ipv6_addresses)
 
 

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 import shutil
@@ -78,10 +77,10 @@ class Server(object):
         self.mpris_server.start()
         self.verification_ui.start()
         self.cakes_server.start()
-        asyncio.run(self.discovery.publish())
+        self.discovery.start()
 
     def stop(self) -> None:
-        asyncio.run(self.discovery.unpublish())
+        self.discovery.stop()
         self.cakes_server.stop()
         self.verification_ui.stop()
         self.mpris_server.stop()

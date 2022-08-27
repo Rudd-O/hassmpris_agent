@@ -7,6 +7,7 @@ import socket
 import os
 import logging
 import netifaces
+import threading
 import uuid
 import time
 from typing import Any, Tuple
@@ -67,33 +68,38 @@ def _service_record(mpris_port: int, cakes_port: int) -> AsyncServiceInfo:
     return service
 
 
-class Publisher:
+class Publisher(threading.Thread):
     def __init__(self, mpris_port: int, cakes_port: int) -> None:
+        threading.Thread.__init__(self, name="mDNS", daemon=True)
         self.aiozc = AsyncZeroconf(ip_version=zeroconf.IPVersion.All)
-        self.services = [_service_record(mpris_port, cakes_port)]
+        self.service = _service_record(mpris_port, cakes_port)
 
-    async def publish(self) -> None:
+    def run(self) -> None:
+        asyncio.run(self._publish())
+
+    async def _publish(self) -> None:
         _LOGGER.debug("Publishing service record.")
-        svcs = self.services
-        tasks = [self.aiozc.async_register_service(info) for info in svcs]
-        background_tasks = await asyncio.gather(*tasks)
-        await asyncio.gather(*background_tasks)
+        await self.aiozc.async_register_service(self.service)
         _LOGGER.debug("Published service record.")
 
-    async def unpublish(self) -> None:
+    async def _unpublish(self) -> None:
         _LOGGER.debug("Unpublishing service record.")
         await self.aiozc.async_unregister_all_services()
         await self.aiozc.async_close()
         _LOGGER.debug("Unpublished service record.")
 
+    def stop(self) -> None:
+        asyncio.run(self._unpublish())
+        self.join()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     a = Publisher(40052, 40051)
-    asyncio.run(a.publish())
+    a.start()
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         pass
-    asyncio.run(a.unpublish())
+    a.stop()

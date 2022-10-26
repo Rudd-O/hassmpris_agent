@@ -59,7 +59,7 @@ def _service_record(mpris_port: int, cakes_port: int) -> AsyncServiceInfo:
     service = AsyncServiceInfo(
         "_hassmpris._tcp.local.",
         "MPRIS on %s@%s._hassmpris._tcp.local."
-        % (os.getenv("USER"), socket.gethostname()),
+        % (os.getenv("USER"), socket.gethostname().split(".")[0]),
         server="hassmpris-%s.local." % guid,
         port=mpris_port,
         properties=desc,

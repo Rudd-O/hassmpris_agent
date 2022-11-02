@@ -9,7 +9,11 @@ from dasbus.error import DBusError
 from dasbus.typing import get_native
 from dasbus.loop import EventLoop
 from dasbus.connection import SessionMessageBus
-from dasbus.client.proxy import disconnect_proxy, InterfaceProxy, get_object_handler
+from dasbus.client.proxy import (
+    disconnect_proxy,
+    InterfaceProxy,
+    get_object_handler as goh,
+)
 import threading
 from hassmpris_agent.mpris.dbus.chromium import ChromiumObjectHandler
 from hassmpris_agent.mpris.dbus.vlc import VLCObjectHandler
@@ -62,7 +66,7 @@ def unpack(obj: Any) -> Any:
 
 
 def test_properties_proxy(proxy: InterfaceProxy) -> None:
-    handler = get_object_handler(proxy)
+    handler = goh(proxy)
     try:
         handler._call_method(
             "org.freedesktop.DBus.Properties",
@@ -171,7 +175,9 @@ class PollSeekController(BaseSeekController):
             )
             self._prop_proxy_connected = True
         except DBusError as e:
-            raise BadPlayer("Cannot connect to properties changed for PSK") from e
+            raise BadPlayer(
+                "Cannot connect to properties changed for PSK",
+            ) from e
         self._source = GLib.timeout_add(self.TICK * 1000, self._check_seeked)
         _LOGGER.debug("Poll seek controller chosen for %s", player)
 
@@ -577,7 +583,9 @@ class Player(GObject.GObject):
                     "org.mpris.MediaPlayer2.Player",
                 )
             except DBusError as e:
-                raise BadPlayer("Cannot get MediaPlayer2.Player properties") from e
+                raise BadPlayer(
+                    "Cannot get MediaPlayer2.Player properties",
+                ) from e
         if emit:
             if PROP_METADATA in allplayerprops_variant:
                 self._set_metadata(

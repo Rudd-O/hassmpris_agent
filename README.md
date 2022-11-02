@@ -5,19 +5,34 @@ to govern multimedia playback.
 
 ## Setup
 
-### Dependencies
+The general process is:
 
-Install GTK+ 4 and libnotify on your system.  These should be packages
-provided by the system.
+1. Install GTK+ 4 and libnotify on your system.
+2. Then install this package.
+3. Finally, run the program `hassmpris-settings` to turn the agent on.
 
-### This package
+See the options below for instructions on various systems.
 
-Install this package on your computer, then run the program
-`hassmpris-settings` to turn the agent on.
+### From PyPI
+
+Ensure GTK+ 4 and libnotify are installed on your system by using your
+system package manager.
+
+Then use `pip install --user -U hassmpris_agent`.  Find the
+`hassmpris-settings` program in your `~/.local/bin` directory.
+
+### As an RPM package
+
+Pre-built packages for various Fedora releases are available at
+https://repo.rudd-o.com/ .  These take care of installing all the required
+dependencies properly.
+
+Find the `hassmpris-settings` program on your system path.
 
 ### Firewall rules
-Don't forget to open the requisite
-firewall ports to allow communication from Home Assistant:
+
+On the system running the agent, don't forget to open the requisite firewall
+ports, to allow Home Assistant to connect to your agent:
 
 * TCP port 40051
 * TCP port 40052
@@ -25,6 +40,10 @@ firewall ports to allow communication from Home Assistant:
 ### Pair with Home Assistant
 
 Once the agent is running you can connect to your computer from Home Assistant.
+Add the MPRIS integration in your Home Assistant instance, optionally
+specifying the address of your machine where this agent is running.  Then
+follow the instructions onscreen in both your agent machine and your Home
+Assistant interface to complete the pairing process.
 
 ## Troubleshooting and help
 

@@ -65,9 +65,12 @@ def unpack(obj: Any) -> Any:
     return obj
 
 
-def test_properties_proxy(proxy: InterfaceProxy) -> None:
+def test_properties_proxy_for_timeout(proxy: InterfaceProxy) -> None:
+    """Check for timeouts."""
     handler = goh(proxy)
     try:
+        _LOGGER.debug("Entering potential hang as properties are retrieved")
+        time.sleep(0.05)
         handler._call_method(
             "org.freedesktop.DBus.Properties",
             "Get",
@@ -80,7 +83,7 @@ def test_properties_proxy(proxy: InterfaceProxy) -> None:
     except GLib.GError as e:
         if e.code == 24 and e.domain == "g-io-error-quark":
             raise TimeoutError("Timed out retrieving MPRIS property") from e
-        raise DBusError("Failed MPRIS interface test") from e
+        raise
 
 
 class BadPlayer(DBusError):
@@ -374,14 +377,15 @@ class Player(GObject.GObject):
 
         # First, test the properties proxy.
         try:
-            _LOGGER.debug("Entering potential hang by getting properties")
-            time.sleep(0.05)
-            test_properties_proxy(properties_proxy)
-        except Exception as e:
-            _LOGGER.exception("D-Bus error")
+            test_properties_proxy_for_timeout(properties_proxy)
+        except TimeoutError as e:
             disconnect_proxy(properties_proxy)
-            _LOGGER.debug("Emergency proxy disconnect complete")
-            raise BadPlayer("Cannot retrieve properties") from e
+            raise BadPlayer("Timeout error retrieving property") from e
+        except Exception:
+            _LOGGER.debug(
+                "Ignoring non-timeout property get error -- "
+                "any fatal errors will be handled downstream"
+            )
 
         # Then, connect the signal to the properties proxy.
         self.properties_proxy = properties_proxy
@@ -391,7 +395,6 @@ class Player(GObject.GObject):
             _LOGGER.debug("Connecting to properties changed signal")
             obj.connect(self._properties_changed)
         except DBusError as e:
-            _LOGGER.exception("D-Bus error")
             self.cleanup()
             raise BadPlayer("Cannot connect to properties changed") from e
 
@@ -402,7 +405,6 @@ class Player(GObject.GObject):
             )
             _LOGGER.debug("Got player properties")
         except DBusError as e:
-            _LOGGER.exception("D-Bus error")
             self.cleanup()
             raise BadPlayer("Cannot get MediaPlayer2 properties") from e
 

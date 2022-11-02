@@ -9,7 +9,7 @@ from dasbus.error import DBusError
 from dasbus.typing import get_native
 from dasbus.loop import EventLoop
 from dasbus.connection import SessionMessageBus
-from dasbus.client.proxy import disconnect_proxy, InterfaceProxy
+from dasbus.client.proxy import disconnect_proxy, InterfaceProxy, get_object_handler
 import threading
 from hassmpris_agent.mpris.dbus.chromium import ChromiumObjectHandler
 from hassmpris_agent.mpris.dbus.vlc import VLCObjectHandler
@@ -59,6 +59,24 @@ def unpack(obj: Any) -> Any:
     elif isinstance(obj, list):
         obj = [unpack(k) for k in obj]
     return obj
+
+
+def test_properties_proxy(proxy: InterfaceProxy) -> None:
+    handler = get_object_handler(proxy)
+    try:
+        handler._call_method(
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            "(ss)",
+            "(v)",
+            "org.mpris.MediaPlayer2",
+            "Rate",
+            timeout=3000,
+        )
+    except GLib.GError as e:
+        if e.code == 24 and e.domain == "g-io-error-quark":
+            raise TimeoutError("Timed out retrieving MPRIS property") from e
+        raise DBusError("Failed MPRIS interface test") from e
 
 
 class BadPlayer(DBusError):
@@ -153,7 +171,7 @@ class PollSeekController(BaseSeekController):
             )
             self._prop_proxy_connected = True
         except DBusError as e:
-            raise BadPlayer from e
+            raise BadPlayer("Cannot connect to properties changed for PSK") from e
         self._source = GLib.timeout_add(self.TICK * 1000, self._check_seeked)
         _LOGGER.debug("Poll seek controller chosen for %s", player)
 
@@ -175,7 +193,7 @@ class PollSeekController(BaseSeekController):
             )
 
         except DBusError as e:
-            raise BadPlayer from e
+            raise BadPlayer("Cannot get all properties for PSK") from e
 
         if PROP_PLAYBACKSTATUS not in props:
             raise BadPlayer("Player properties do not contain PlaybackStatus")
@@ -333,11 +351,13 @@ class Player(GObject.GObject):
         return "<Player %s at %s>" % (self.identity, self.player_id)
 
     def __init__(self, bus: SessionMessageBus, player_id: str) -> None:
+        _LOGGER.debug("Discovering player %s", player_id)
         GObject.GObject.__init__(self)
         self._sources: list[int] = []
 
         self.player_id = player_id
-        self.properties_proxy = cast(
+
+        properties_proxy = cast(
             InterfaceProxy,
             bus.get_proxy(
                 player_id,
@@ -346,25 +366,39 @@ class Player(GObject.GObject):
             ),
         )
 
-        # First, connect the signal to the properties proxy.
+        # First, test the properties proxy.
         try:
-            _LOGGER.debug("entering potential hang by getting properties")
+            _LOGGER.debug("Entering potential hang by getting properties")
             time.sleep(0.05)
-            self.properties_proxy.PropertiesChanged.connect(
-                self._properties_changed,
-            )
-            _LOGGER.debug("potential hang by getting properties avoided")
+            test_properties_proxy(properties_proxy)
+        except Exception as e:
+            _LOGGER.exception("D-Bus error")
+            disconnect_proxy(properties_proxy)
+            _LOGGER.debug("Emergency proxy disconnect complete")
+            raise BadPlayer("Cannot retrieve properties") from e
+
+        # Then, connect the signal to the properties proxy.
+        self.properties_proxy = properties_proxy
+        try:
+            _LOGGER.debug("Obtaining properties changed signal")
+            obj = properties_proxy.PropertiesChanged
+            _LOGGER.debug("Connecting to properties changed signal")
+            obj.connect(self._properties_changed)
         except DBusError as e:
+            _LOGGER.exception("D-Bus error")
             self.cleanup()
-            raise BadPlayer from e
+            raise BadPlayer("Cannot connect to properties changed") from e
 
         try:
+            _LOGGER.debug("Getting all MediaPlayer2 properties")
             allprops_variant = self.properties_proxy.GetAll(
                 "org.mpris.MediaPlayer2",
             )
+            _LOGGER.debug("Got player properties")
         except DBusError as e:
+            _LOGGER.exception("D-Bus error")
             self.cleanup()
-            raise BadPlayer from e
+            raise BadPlayer("Cannot get MediaPlayer2 properties") from e
 
         try:
             allprops = unpack(allprops_variant)
@@ -543,7 +577,7 @@ class Player(GObject.GObject):
                     "org.mpris.MediaPlayer2.Player",
                 )
             except DBusError as e:
-                raise BadPlayer from e
+                raise BadPlayer("Cannot get MediaPlayer2.Player properties") from e
         if emit:
             if PROP_METADATA in allplayerprops_variant:
                 self._set_metadata(
@@ -593,7 +627,8 @@ class Player(GObject.GObject):
     def get_position(self) -> float | None:
         try:
             prop = self.properties_proxy.Get(
-                "org.mpris.MediaPlayer2.Player", PROP_POSITION,
+                "org.mpris.MediaPlayer2.Player",
+                PROP_POSITION,
             )
             return float(unpack(prop)) / 1000 / 1000
         except DBusError:

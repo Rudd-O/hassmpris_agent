@@ -37,8 +37,10 @@ errors you find, and logs from this program) to the project's
 The general process is:
 
 1. Install GTK+ 4 and libnotify on your system.
-2. Then install this package.
-3. Finally, run the settings program to turn the agent on.
+2. Then install / upgrade this package.  If upgrading,
+   log out then log back in after installation.
+3. Finally, run the settings program to turn the agent on,
+   or (if upgrading) to verify that the agent is running.
 
 See the options below for instructions on various systems.
 

@@ -3,17 +3,46 @@
 This package contains the agent that Home Assistant connects to in order
 to govern multimedia playback.
 
+## What is this program for?
+
+This program lets your computer's media players be remotely controlled by any
+compatible client (most common being [Home Assistant](home-assistant.io/)),
+when you are logged into your computer's desktop session.
+
+A small utility that lets you turn this program on or off is also shipped in
+this package.
+
+## Supported media players
+
+In general, all media players compliant with the MPRIS specification should
+work to varying degrees of compatibility.  That said, here is a list of
+media players known to work, and their supported features:
+
+* VLC:
+  * Play / pause / stop.
+  * Playback rate change.
+  * Next / previous track.
+  * Seek.
+* Google Chrome / Chromium
+  * Play / pause / stop.
+  * Next / previous track.
+  * Seek.
+
+If you test another media player, report your test results (along with any
+errors you find, and logs from this program) to the project's
+[issue tracker](https://github.com/Rudd-O/hassmpris_agent/issues).
+
 ## Setup
 
 The general process is:
 
 1. Install GTK+ 4 and libnotify on your system.
 2. Then install this package.
-3. Finally, run the program `hassmpris-settings` to turn the agent on.
+3. Finally, run the settings program to turn the agent on.
 
 See the options below for instructions on various systems.
 
-### From PyPI
+### Install from PyPI
 
 Ensure GTK+ 4 and libnotify are installed on your system by using your
 system package manager.
@@ -21,13 +50,23 @@ system package manager.
 Then use `pip install --user -U hassmpris_agent`.  Find the
 `hassmpris-settings` program in your `~/.local/bin` directory.
 
-### As an RPM package
+### Install as an RPM package
 
 Pre-built packages for various Fedora releases are available at
 https://repo.rudd-o.com/ .  These take care of installing all the required
 dependencies properly.
 
 Find the `hassmpris-settings` program on your system path.
+
+### Run the agent
+
+Run the program `hassmpris-settings` to start the settings program.  If this
+program is not readily available, run `python3 -m hassmpris_agent.settings`
+instead.
+
+A window will pop up, with a slider to turn the agent on.  Slide the slider
+to the *on* position to start the agent.  From then on, the agent will auto
+start every time you log in.
 
 ### Firewall rules
 

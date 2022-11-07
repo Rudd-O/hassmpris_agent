@@ -3,6 +3,7 @@
 """ Example of announcing a service (in this case, a fake HTTP server) """
 
 import asyncio
+import ipaddress
 import socket
 import os
 import logging
@@ -27,10 +28,22 @@ def get_ip_addresses() -> Tuple[list[Any], list[Any]]:
         addrs = netifaces.ifaddresses(iface)
         if netifaces.AF_INET in addrs:
             for addr in addrs[netifaces.AF_INET]:
-                addresses.append(addr["addr"])
+                try:
+                    ip_addr = ipaddress.ip_address(addr["addr"])
+                except Exception:
+                    _LOGGER.exception("Error processing IP address %s", addr)
+                    continue
+                if not ip_addr.is_loopback and not ip_addr.is_unspecified:
+                    addresses.append(addr["addr"])
         if netifaces.AF_INET6 in addrs:
             for addr in addrs[netifaces.AF_INET6]:
-                ipv6_addresses.append(addr["addr"].split("%")[0])
+                try:
+                    ip_addr = ipaddress.ip_address(addr["addr"].split("%")[0])
+                except Exception:
+                    _LOGGER.exception("Error processing IP address %s", addr)
+                    continue
+                if not ip_addr.is_loopback and not ip_addr.is_unspecified:
+                    ipv6_addresses.append(addr["addr"].split("%")[0])
     return (addresses, ipv6_addresses)
 
 

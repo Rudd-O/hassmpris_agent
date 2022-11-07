@@ -418,7 +418,9 @@ class Player(GObject.GObject):
                 ),
             )
             _LOGGER.info(
-                "Player with bus ID %s has identity %s", player_id, self.identity
+                "Player with bus ID %s has identity %s",
+                player_id,
+                self.identity,
             )
 
             kw = {}

@@ -417,6 +417,9 @@ class Player(GObject.GObject):
                     self.player_id,
                 ),
             )
+            _LOGGER.info(
+                "Player with bus ID %s has identity %s", player_id, self.identity
+            )
 
             kw = {}
             if self.identity.lower().startswith("chrom"):

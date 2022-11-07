@@ -18,7 +18,7 @@ In general, all media players compliant with the MPRIS specification should
 work to varying degrees of compatibility.  That said, here is a list of
 media players known to work, and their supported features:
 
-* VLC:
+* VLC
   * Play / pause / stop.
   * Playback rate change.
   * Next / previous track.
@@ -27,6 +27,12 @@ media players known to work, and their supported features:
   * Play / pause / stop.
   * Next / previous track.
   * Seek.
+* Amarok
+  * Play / pause / stop.
+  * Next / previous track.
+  * Seek.
+* Spotifyd
+  * Nothing works — it hangs when its MPRIS interface is queried.
 
 If you test another media player, report your test results (along with any
 errors you find, and logs from this program) to the project's

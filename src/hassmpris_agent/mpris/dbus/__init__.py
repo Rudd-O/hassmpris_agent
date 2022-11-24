@@ -26,27 +26,35 @@ from gi.repository import GLib, GObject  # noqa
 
 _LOGGER = logging.getLogger(__name__)
 
-ALL_CAN_PROPS = [
-    "CanControl",
-    "CanPause",
-    "CanPlay",
-    "CanSeek",
-    "CanGoNext",
-    "CanGoPrevious",
-]
-ALL_NUMERIC_PROPS = {
-    "Rate": 1.0,
-    "MinimumRate": 1.0,
-    "MaximumRate": 1.0,
-}
+STATUS_PLAYING = "Playing"
+STATUS_PAUSED = "Paused"
+STATUS_STOPPED = "Stopped"
+
 PROP_PLAYBACKSTATUS = "PlaybackStatus"
+PROP_MINIMUM_RATE = "MinimumRate"
+PROP_MAXIMUM_RATE = "MaximumRate"
 PROP_RATE = "Rate"
 PROP_POSITION = "Position"
 PROP_METADATA = "Metadata"
 
-STATUS_PLAYING = "Playing"
-STATUS_PAUSED = "Paused"
-STATUS_STOPPED = "Stopped"
+ALL_CAN_PROPS = {
+    "CanControl": False,
+    "CanPause": False,
+    "CanPlay": False,
+    "CanSeek": False,
+    "CanGoNext": False,
+    "CanGoPrevious": False,
+}
+ALL_NUMERIC_PROPS = {
+    PROP_MINIMUM_RATE: 1.0,
+    PROP_MAXIMUM_RATE: 1.0,
+    PROP_RATE: 1.0,
+}
+ALL_OTHER_PROPS = {
+    PROP_PLAYBACKSTATUS: STATUS_STOPPED,
+    PROP_METADATA: lambda: dict(),
+}
+ALL_PROPS = ALL_OTHER_PROPS | ALL_CAN_PROPS | ALL_NUMERIC_PROPS
 
 
 def deepequals(one: Any, two: Any) -> bool:
@@ -207,7 +215,7 @@ class PollSeekController(BaseSeekController):
         if PROP_PLAYBACKSTATUS not in props:
             raise BadPlayer("Player properties do not contain PlaybackStatus")
         if PROP_RATE not in props:
-            props[PROP_RATE] = 0.0
+            props[PROP_RATE] = 1.0
         if PROP_POSITION not in props:
             props[PROP_POSITION] = 0
         return (
@@ -456,8 +464,9 @@ class Player(GObject.GObject):
             )
         self.seek_controller.connect("seeked", self._handle_seek)
 
-        self._set_player_properties(
-            emit=False,
+        self._update_player_properties(
+            self._fetch_player_properties_from_dbus(),
+            init=True,
         )
 
     def cleanup(self) -> None:
@@ -504,21 +513,7 @@ class Player(GObject.GObject):
 
         propdict = dict(propdict.items())
 
-        if PROP_PLAYBACKSTATUS in propdict:
-            handled[PROP_PLAYBACKSTATUS] = propdict[PROP_PLAYBACKSTATUS]
-            del propdict[PROP_PLAYBACKSTATUS]
-        elif PROP_PLAYBACKSTATUS in invalidated_properties:
-            handled[PROP_PLAYBACKSTATUS] = GLib.Variant("s", STATUS_STOPPED)
-            invalidated_properties.remove(PROP_PLAYBACKSTATUS)
-
-        if PROP_METADATA in propdict:
-            handled[PROP_METADATA] = propdict[PROP_METADATA]
-            del propdict[PROP_METADATA]
-        elif PROP_METADATA in invalidated_properties:
-            handled[PROP_METADATA] = {}
-            invalidated_properties.remove(PROP_METADATA)
-
-        for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
+        for prop in ALL_PROPS:
             if prop in propdict:
                 handled[prop] = propdict[prop]
                 del propdict[prop]
@@ -546,10 +541,7 @@ class Player(GObject.GObject):
             )
 
         # Call the property updates now.
-        self._set_player_properties(
-            emit=True,
-            allplayerprops_variant=handled,
-        )
+        self._update_player_properties(allplayerprops_variant=handled)
 
         # Now queue update CanPlay and other properties since some players
         # like VLC sometimes neglect to do so.  We basically wait 50 ms
@@ -561,7 +553,9 @@ class Player(GObject.GObject):
 
         def inner() -> None:
             try:
-                self._set_player_properties(emit=True)
+                props = self._fetch_player_properties_from_dbus()
+                if props is not None:
+                    self._update_player_properties(props)
             except DBusError:
                 # Player is gone:
                 pass
@@ -577,67 +571,65 @@ class Player(GObject.GObject):
         self._sources.append(source)
         mysource.append(source)
 
-    def _set_player_properties(
-        self,
-        emit: bool = True,
-        allplayerprops_variant: Any | None = None,
-    ) -> None:
-        if not allplayerprops_variant:
-            if not hasattr(self, "properties_proxy"):
-                return
-            try:
-                allplayerprops_variant = self.properties_proxy.GetAll(
-                    "org.mpris.MediaPlayer2.Player",
-                )
-            except DBusError as e:
-                raise BadPlayer(
-                    "Cannot get MediaPlayer2.Player properties",
-                ) from e
-        if emit:
-            if PROP_METADATA in allplayerprops_variant:
-                self._set_metadata(
-                    allplayerprops_variant[PROP_METADATA],
-                )
-            if PROP_PLAYBACKSTATUS in allplayerprops_variant:
-                self._set_playback_status(
-                    allplayerprops_variant[PROP_PLAYBACKSTATUS],
-                )
-            for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
-                if prop in allplayerprops_variant:
-                    self._set_property(prop, allplayerprops_variant[prop])
-        else:
-            # This branch is only called upon object initialization.
-            # Accordingly, since we assume we are getting all the player
-            # properties known through D-Bus, then we take the liberty
-            # of updating all even with default values.
-            allplayerprops = unpack(allplayerprops_variant)
-            self.playback_status: str = allplayerprops.get(
-                PROP_PLAYBACKSTATUS,
-                STATUS_STOPPED,
+    def _fetch_player_properties_from_dbus(self) -> GLib.Variant:
+        if not hasattr(self, "properties_proxy"):
+            return
+        try:
+            return self.properties_proxy.GetAll(
+                "org.mpris.MediaPlayer2.Player",
             )
-            self.metadata: str = allplayerprops.get(PROP_METADATA, {})
-            for prop in ALL_CAN_PROPS:
-                setattr(self, prop, allplayerprops.get(prop, False))
-            for prop, defval in ALL_NUMERIC_PROPS.items():
-                setattr(self, prop, allplayerprops.get(prop, defval))
+        except DBusError as e:
+            raise BadPlayer(
+                "Cannot get MediaPlayer2.Player properties",
+            ) from e
 
-    def _set_playback_status(self, playback_status: GLib.Variant) -> None:
-        pbstatus = unpack(playback_status)
-        if pbstatus != self.playback_status:
-            self.playback_status = pbstatus
-            self.emit("playback-status-changed", self.playback_status)
+    def _update_player_properties(
+        self,
+        allplayerprops_variant: GLib.Variant,
+        init: bool = False,
+    ) -> None:
+        allplayerprops = unpack(allplayerprops_variant)
+        for prop, defval in ALL_PROPS.items():
+            if prop in allplayerprops:
+                # We have this property.  We update the value we have locally,
+                # taking care not to emit anything during initialization.
+                self._set_property(prop, allplayerprops[prop], init)
+            elif init:
+                # We are initializing.
+                # Accordingly, since we assume we are getting all the player
+                # properties known through D-Bus, then we take the liberty
+                # of updating all even with default values.
+                if callable(defval):
+                    defval = defval()
+                self._set_property(prop, defval, init)
 
-    def _set_property(self, name: str, value: GLib.Variant) -> None:
-        realvalue = unpack(value)
-        if realvalue != getattr(self, name):
-            setattr(self, name, realvalue)
-            self.emit("property-changed", name, realvalue)
-
-    def _set_metadata(self, metadata: GLib.Variant) -> None:
-        m = unpack(metadata)
-        if not deepequals(m, self.metadata):
-            self.metadata = m
-            self.emit("metadata-changed", self.metadata)
+    def _set_property(
+        self,
+        prop: str,
+        value: Any,
+        init: bool = False,
+    ) -> None:
+        # Checks for validity.
+        if prop == PROP_RATE and value == 0:
+            _LOGGER.warning(
+                "%s: %s cannot be %s, ignoring",
+                self.identity,
+                prop,
+                value,
+            )
+            return
+        if init:
+            # We are not emitting anything during initialization.
+            setattr(self, prop, value)
+            return
+        if not deepequals(value, getattr(self, prop)):
+            setattr(self, prop, value)
+            if prop == PROP_PLAYBACKSTATUS:
+                self.emit("playback-status-changed", value)
+            elif prop == PROP_METADATA:
+                self.emit("metadata-changed", value)
+            else:
+                self.emit("property-changed", prop, value)
 
     def get_position(self) -> float | None:
         try:

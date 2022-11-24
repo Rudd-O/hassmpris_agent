@@ -56,11 +56,11 @@ def metadata_to_json_metadata(metadata: Any) -> str:
 
 
 def playerappearedmessage(player: Player) -> mpris_pb2.MPRISUpdateReply:
-    s = playback_status_to_PlayerStatus(player.playback_status)
-    m = metadata_to_json_metadata(player.metadata)
+    s = playback_status_to_PlayerStatus(player.PlaybackStatus)
+    m = metadata_to_json_metadata(player.Metadata)
     props = {}
     kwargs = {}
-    for prop in ALL_CAN_PROPS + list(ALL_NUMERIC_PROPS):
+    for prop in list(ALL_CAN_PROPS) + list(ALL_NUMERIC_PROPS):
         props[prop] = getattr(player, prop)
     position = player.get_position()
     if position is not None and position != 0.0:

@@ -68,7 +68,8 @@ Pre-built packages for various Fedora releases are available at
 https://repo.rudd-o.com/ .  These take care of installing all the required
 dependencies properly.
 
-Find the `hassmpris-settings` program on your system path.
+Find the `hassmpris-settings` and `hassmpris-agent` programs
+in your system `$PATH` (generally `/usr/bin`).
 
 ### Run the agent
 

@@ -56,7 +56,11 @@ Ensure GTK+ 4 and libnotify are installed on your system by using your
 system package manager.
 
 Then use `pip install --user -U hassmpris_agent`.  Find the
-`hassmpris-settings` program in your `~/.local/bin` directory.
+`hassmpris-settings` and `hassmpris-agent` programs in your
+`~/.local/bin` directory.
+
+*Never install anything using `pip` to your system Python
+library directory.  It can cause problems for you down the road.*
 
 ### Install as an RPM package
 
@@ -68,6 +72,8 @@ Find the `hassmpris-settings` program on your system path.
 
 ### Run the agent
 
+#### Within your graphical desktop session (as usual)
+
 Run the program `hassmpris-settings` to start the settings program.  If this
 program is not readily available, run `python3 -m hassmpris_agent.settings`
 instead.
@@ -75,6 +81,18 @@ instead.
 A window will pop up, with a slider to turn the agent on.  Slide the slider
 to the *on* position to start the agent.  From then on, the agent will auto
 start every time you log in.
+
+#### Manually (e.g. in a headless scenario)
+
+Run the program `hassmpris-agent`.  This program must be run **after**
+the session has a successfully-executed D-Bus session daemon, otherwise
+the D-Bus client within the program will attempt to auto-launch D-Bus
+and this will not work without an X11 or Wayland graphical session.
+
+The program should work without issue in a headless session, providing
+remote access to any media players sharing the same D-Bus session with
+the agent.  If it does not, please file an issue in this project's
+Github repository.
 
 ### Firewall rules
 

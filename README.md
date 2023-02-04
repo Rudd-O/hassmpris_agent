@@ -5,12 +5,15 @@ to govern multimedia playback.
 
 ## What is this program for?
 
-This program lets your computer's media players be remotely controlled by any
-compatible client (most common being [Home Assistant](home-assistant.io/)),
-when you are logged into your computer's desktop session.
+This program lets your computer's media players (compatible with the MPRIS
+standard) be remotely controlled by any compatible client (most common being
+[Home Assistant](https://home-assistant.io/)), when you are logged into your
+computer's desktop session.  Headless operation should also be supported
+(although it is not regularly exercised) so long as the program runs in a
+D-Bus session shared by other MPRIS-compatible media players as well.
 
-A small utility that lets you turn this program on or off is also shipped in
-this package.
+A small graphical utility that lets you turn this program on or off is
+shipped with this package as well.
 
 ## Supported media players
 
@@ -33,6 +36,8 @@ media players known to work, and their supported features:
   * Seek.
 * Spotifyd
   * Nothing works — it hangs when its MPRIS interface is queried.
+* MPD
+  * Requires the [mpd-mpris](https://github.com/natsukagami/mpd-mpris) service
 
 If you test another media player, report your test results (along with any
 errors you find, and logs from this program) to the project's

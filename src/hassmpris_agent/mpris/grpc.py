@@ -37,6 +37,7 @@ from hassmpris_agent.mpris.dbus import (
     STATUS_PLAYING,
 )
 
+HEARTBEAT_FREQUENCY: int = 10
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -291,7 +292,7 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
         try:
             while True:
                 try:
-                    m = q.get(timeout=10)
+                    m = q.get(timeout=HEARTBEAT_FREQUENCY)
                 except QueueEmpty:
                     m = mpris_pb2.MPRISUpdateReply(
                         heartbeat=mpris_pb2.MPRISUpdateHeartbeat(),

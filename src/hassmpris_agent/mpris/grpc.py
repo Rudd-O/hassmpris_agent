@@ -394,6 +394,28 @@ class MPRISServicer(mpris_pb2_grpc.MPRISServicer):
 
         return mpris_pb2.SetPositionReply()
 
+    @player_id_validated
+    @with_mpris
+    def SeekAbsolute(
+        self,
+        request: mpris_pb2.SeekAbsoluteRequest,
+        context: grpc.ServicerContext,
+    ) -> mpris_pb2.SeekAbsoluteReply:
+        _LOGGER.debug(
+            "Requested %s set position %s seconds",
+            request.player_id,
+            request.position,
+        )
+        try:
+            self.mpris.seek_absolute(
+                request.player_id,
+                request.position,
+            )
+        except OverflowError as e:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        return mpris_pb2.SeekAbsoluteReply()
+
     def Ping(
         self, unused_request: Empty, unused_context: grpc.ServicerContext
     ) -> Empty:

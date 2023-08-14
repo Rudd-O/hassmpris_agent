@@ -26,10 +26,18 @@ media players known to work, and their supported features:
   * Playback rate change.
   * Next / previous track.
   * Seek.
+  * Support uses polling for seek position because VLC does not correctly
+    implement the `Seeked` D-Bus signals.
 * Google Chrome / Chromium
   * Play / pause / stop.
   * Next / previous track.
   * Seek.
+* Totem (GNOME Videos)
+  * Play / pause / stop.
+  * Next / previous track.
+  * Seek.
+  * Support uses polling because Totem does not correctly implement the
+    `Seeked` or the `PropertiesChanged` D-Bus signals.
 * Amarok
   * Play / pause / stop.
   * Next / previous track.

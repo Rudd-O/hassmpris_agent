@@ -522,9 +522,9 @@ class Player(GObject.GObject):
         _LOGGER.debug("Discovering player %s", player_id)
         GObject.GObject.__init__(self)
         self.player_id = player_id
-        self._cleanuppers: list[tuple[str, Callable[[], None]]] = []
+        self._cleanuppers: list[tuple[str, Callable[[], Any]]] = []
 
-        def to_cleanup(name: str, func: Callable[[], None]) -> None:
+        def to_cleanup(name: str, func: Callable[[], Any]) -> None:
             self._cleanuppers.append((name, func))
 
         try:

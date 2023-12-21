@@ -235,7 +235,6 @@ class SettingsApplication(object):
             dasbus.client.proxy.disconnect_proxy(proxy)
 
     def retrieve_service_state(self) -> Tuple[str, bool]:
-
         try:
             with self.hassmpris_proxy() as proxy:
                 proxy.Ping()

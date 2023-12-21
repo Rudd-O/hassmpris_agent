@@ -85,8 +85,8 @@ def test_properties_proxy_for_timeout(proxy: InterfaceProxy) -> None:
             "(ss)",
             "(v)",
             "org.mpris.MediaPlayer2",
-            "Rate",
-            timeout=3000,
+            "CanQuit",
+            timeout=1000,
         )
     except GLib.GError as e:
         if e.code == 24 and e.domain == "g-io-error-quark":
@@ -546,10 +546,11 @@ class Player(GObject.GObject):
                 test_properties_proxy_for_timeout(prop_proxy)
             except TimeoutError as e:
                 raise BadPlayer("Timeout error retrieving property") from e
-            except Exception:
-                _LOGGER.debug(
-                    "Ignoring non-timeout property get error -- "
-                    "any fatal errors will be handled downstream"
+            except Exception as exc:
+                _LOGGER.exception(
+                    "Ignoring non-timeout property get error %s -- "
+                    "any fatal errors will be handled downstream",
+                    exc,
                 )
 
             try:

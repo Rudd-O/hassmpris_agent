@@ -706,12 +706,12 @@ class Player(GObject.GObject):
         # Checks for validity.
         if prop == PROP_RATE and value == 0:
             _LOGGER.warning(
-                "%s: %s cannot be %s, ignoring",
+                "%s: %s cannot be %s, ignoring and pretending it is 1.0",
                 self.identity,
                 prop,
                 value,
             )
-            return
+            value = 1.0
         if init:
             # We are not emitting anything during initialization.
             setattr(self, prop, value)

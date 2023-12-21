@@ -8,7 +8,7 @@
 %define mybuildnumber %{?build_number}%{?!build_number:1}
 
 Name:           python-%{_name}
-Version:        0.0.37
+Version:        0.0.38
 Release:        %{mybuildnumber}%{?dist}
 Summary:        Linux desktop agent to allow MPRIS multimedia control from Home Assistant
 

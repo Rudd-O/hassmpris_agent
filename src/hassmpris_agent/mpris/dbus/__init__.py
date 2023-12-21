@@ -3,7 +3,7 @@ import logging
 import time
 
 
-from typing import Dict, Any, Optional, List, cast, Tuple
+from typing import Dict, Any, Optional, List, cast, Tuple, Callable
 
 from dasbus.error import DBusError
 from dasbus.typing import get_native
@@ -99,7 +99,6 @@ class BadPlayer(DBusError):
 
 
 class BaseSeekController(GObject.GObject):
-
     __gsignals__ = {
         # Emitted when the player being monitored has seeked in a way that is
         # inconsistent with the playback state.  Unlike the Seeked D-Bus MPRIS
@@ -112,35 +111,46 @@ class BaseSeekController(GObject.GObject):
         ),
     }
 
-    def __init__(self, player, control_proxy, properties_proxy):
+    def __init__(self, control_proxy, properties_proxy):
         # type: (Player, InterfaceProxy, InterfaceProxy) -> None
         GObject.GObject.__init__(self)
-        self.player = player
         self.control_proxy = control_proxy
         self.properties_proxy = properties_proxy
 
     def __del__(self) -> None:
+        _LOGGER.debug("Cleaning up %s controller", self)
         if hasattr(self, "control_proxy"):
             delattr(self, "control_proxy")
         if hasattr(self, "properties_proxy"):
             delattr(self, "properties_proxy")
-        if hasattr(self, "player"):
-            delattr(self, "player")
 
 
 class SignalSeekController(BaseSeekController):
-    def __init__(self, player, control_proxy, properties_proxy):
-        # type: (Player, InterfaceProxy, InterfaceProxy) -> None
-        control_proxy.Seeked.connect(
-            self._seeked,
-        )
+    def __init__(self, control_proxy, properties_proxy):
+        # type: (InterfaceProxy, InterfaceProxy) -> None
         BaseSeekController.__init__(
             self,
-            player,
             control_proxy,
             properties_proxy,
         )
-        _LOGGER.debug("Signal seek controller chosen for %s", player)
+        _LOGGER.debug("Signal seek controller chosen")
+        self.started = False
+
+    def start(self) -> None:
+        if not self.started:
+            self.control_proxy.Seeked.connect(
+                self._seeked,
+            )
+            self.started = True
+
+    def stop(self) -> None:
+        if self.started:
+            try:
+                self.control_proxy.Seeked.disconnect(self._seeked)
+            except (ImportError, DBusError):
+                # Python or the MPRIS bus owner is shutting down.
+                pass
+            self.started = False
 
     def _seeked(
         self,
@@ -150,25 +160,18 @@ class SignalSeekController(BaseSeekController):
         self.emit("seeked", pos)
 
     def __del__(self) -> None:
-        if hasattr(self, "control_proxy"):
-            try:
-                self.control_proxy.Seeked.disconnect(self._seeked)
-            except (ImportError, DBusError):
-                # Python or the MPRIS bus owner is shutting down.
-                pass
+        self.stop()
         BaseSeekController.__del__(self)
 
 
 class PollSeekController(BaseSeekController):
-
     TICK = 1
     _prop_proxy_connected = False
 
-    def __init__(self, player, control_proxy, properties_proxy):
-        # type: (Player, InterfaceProxy, InterfaceProxy) -> None
+    def __init__(self, control_proxy, properties_proxy):
+        # type: (InterfaceProxy, InterfaceProxy) -> None
         BaseSeekController.__init__(
             self,
-            player,
             control_proxy,
             properties_proxy,
         )
@@ -178,19 +181,28 @@ class PollSeekController(BaseSeekController):
             self._position,
             self._rate,
         ) = self._get_pbstatus_pos_rate()
-        # First, connect the signal to the properties proxy.
-        try:
+        _LOGGER.debug("Poll seek controller chosen")
+        self._source: Any = None
+
+    def start(self) -> None:
+        if self._source is None:
             time.sleep(0.05)
             self.properties_proxy.PropertiesChanged.connect(
                 self._check_playback_change,
             )
-            self._prop_proxy_connected = True
-        except DBusError as e:
-            raise BadPlayer(
-                "Cannot connect to properties changed for PSK",
-            ) from e
-        self._source = GLib.timeout_add(self.TICK * 1000, self._check_seeked)
-        _LOGGER.debug("Poll seek controller chosen for %s", player)
+            self._source = GLib.timeout_add(self.TICK * 1000, self._check_seeked)
+
+    def stop(self) -> None:
+        if self._source is not None:
+            try:
+                self.properties_proxy.PropertiesChanged.disconnect(
+                    self._check_playback_change,
+                )
+            except (ImportError, DBusError):
+                # Python or the MPRIS bus owner is shutting down.
+                pass
+            GLib.source_remove(self._source)
+            self._source = None
 
     def _check_playback_change(
         self,
@@ -233,8 +245,7 @@ class PollSeekController(BaseSeekController):
             checked, status, pos, rate = self._get_pbstatus_pos_rate()
         except DBusError:
             # Player is probably gone now.
-            GLib.source_remove(self._source)
-            self._source = None
+            self.stop()
             return False
 
         tick = self.TICK
@@ -312,7 +323,12 @@ class PollSeekController(BaseSeekController):
             self.emit("seeked", cur_pos_s)
 
         if self._rate != rate or self._status != status or seeked:
-            (self._last_checked, self._status, self._position, self._rate,) = (
+            (
+                self._last_checked,
+                self._status,
+                self._position,
+                self._rate,
+            ) = (
                 checked,
                 status,
                 pos,
@@ -321,23 +337,11 @@ class PollSeekController(BaseSeekController):
         return True
 
     def __del__(self) -> None:
-        if hasattr(self, "_source") and self._source is not None:
-            GLib.source_remove(self._source)
-            self._source = None
-        if self._prop_proxy_connected:
-            try:
-                self.properties_proxy.PropertiesChanged.disconnect(
-                    self._check_playback_change,
-                )
-            except (ImportError, DBusError):
-                # Python or the MPRIS bus owner is shutting down.
-                pass
-            self._prop_proxy_connected = False
+        self.stop()
         BaseSeekController.__del__(self)
 
 
 class BasePropertiesController(GObject.GObject):
-
     __gsignals__ = {
         # Emitted when the player being monitored has had its
         # properties changed.
@@ -348,19 +352,15 @@ class BasePropertiesController(GObject.GObject):
         ),
     }
 
-    def __init__(self, player, properties_proxy):
-        # type: (Player, InterfaceProxy) -> None
+    def __init__(self, properties_proxy: InterfaceProxy) -> None:
         GObject.GObject.__init__(self)
-        _LOGGER.debug("Using %s", self)
-        self.player = player
+        _LOGGER.debug("Using %s", self.__class__.__name__)
         self.properties_proxy = properties_proxy
 
     def __del__(self) -> None:
         _LOGGER.debug("Cleaning up %s controller", self)
         if hasattr(self, "properties_proxy"):
             delattr(self, "properties_proxy")
-        if hasattr(self, "player"):
-            delattr(self, "player")
 
     def get_properties(self) -> GLib.Variant:
         if not hasattr(self, "properties_proxy"):
@@ -373,6 +373,16 @@ class BasePropertiesController(GObject.GObject):
             raise BadPlayer(
                 "Cannot get MediaPlayer2.Player properties",
             ) from e
+
+    def get_position(self) -> float | None:
+        try:
+            prop = self.properties_proxy.Get(
+                "org.mpris.MediaPlayer2.Player",
+                PROP_POSITION,
+            )
+            return float(unpack(prop)) / 1000 / 1000
+        except DBusError:
+            return None
 
     def get_entity_properties(self) -> GLib.Variant:
         if not hasattr(self, "properties_proxy"):
@@ -388,23 +398,20 @@ class BasePropertiesController(GObject.GObject):
 
 
 class SignalPropertiesController(BasePropertiesController):
-    def __init__(self, player, properties_proxy):
-        # type: (Player, InterfaceProxy) -> None
+    def __init__(self, properties_proxy: InterfaceProxy) -> None:
         """
         Creates a property retrieval controller, taking ownership of the
         properties proxy.
         """
         self._sources: list[int] = []
-        BasePropertiesController.__init__(
-            self,
-            player,
-            properties_proxy,
-        )
+        BasePropertiesController.__init__(self, properties_proxy)
+        self.started = False
 
     def start(self) -> None:
         self.properties_proxy.PropertiesChanged.connect(
             self._properties_changed,
         )
+        self.started = True
 
     def _properties_changed(
         self,
@@ -418,8 +425,6 @@ class SignalPropertiesController(BasePropertiesController):
         self._delayed_property_update()
 
     def _delayed_property_update(self) -> None:
-        mysource: list[int] = []
-
         def inner() -> None:
             try:
                 props = self.get_properties()
@@ -427,50 +432,40 @@ class SignalPropertiesController(BasePropertiesController):
             except DBusError:
                 # Player is gone:
                 pass
-            for source in mysource:
+            for source in self._sources:
                 GLib.source_remove(source)
                 if source in self._sources:
                     self._sources.remove(source)
 
-        self.stop()
         source = GLib.timeout_add(50, inner)
         self._sources.append(source)
-        mysource.append(source)
 
     def stop(self) -> None:
         for source in self._sources:
             GLib.source_remove(source)
         self._sources = []
+        if self.started:
+            self.properties_proxy.PropertiesChanged.disconnect(self._properties_changed)
+        self.started = False
 
     def __del__(self) -> None:
         self.stop()
-        if hasattr(self, "properties_proxy"):
-            try:
-                self.properties_proxy.PropertiesChanged.disconnect(
-                    self._properties_changed
-                )
-            except (ImportError, DBusError):
-                # Python or the MPRIS bus owner is shutting down.
-                pass
         BasePropertiesController.__del__(self)
 
 
 class PollPropertiesController(BasePropertiesController):
-    def __init__(self, player, properties_proxy):
-        # type: (Player, InterfaceProxy) -> None
+    def __init__(self, properties_proxy: InterfaceProxy):
         """
         Creates a property retrieval controller, taking ownership of the
         properties proxy.
         """
         self._sources: list[int] = []
-        BasePropertiesController.__init__(
-            self,
-            player,
-            properties_proxy,
-        )
+        BasePropertiesController.__init__(self, properties_proxy)
+        self.started = False
 
     def start(self) -> None:
         self._sources.append(GLib.timeout_add(2000, self._periodic_property_update))
+        self.started = True
 
     def _periodic_property_update(self) -> bool:
         try:
@@ -486,6 +481,7 @@ class PollPropertiesController(BasePropertiesController):
         for source in self._sources:
             GLib.source_remove(source)
         self._sources = []
+        self.started = False
 
     def __del__(self) -> None:
         self.stop()
@@ -493,7 +489,6 @@ class PollPropertiesController(BasePropertiesController):
 
 
 class Player(GObject.GObject):
-
     __gsignals__ = {
         "playback-status-changed": (
             GObject.SignalFlags.RUN_LAST,
@@ -526,87 +521,92 @@ class Player(GObject.GObject):
     def __init__(self, bus: SessionMessageBus, player_id: str) -> None:
         _LOGGER.debug("Discovering player %s", player_id)
         GObject.GObject.__init__(self)
-        self._sources: list[int] = []
-
         self.player_id = player_id
+        self._cleanuppers: list[tuple[str, Callable[[], None]]] = []
 
-        properties_proxy = cast(
-            InterfaceProxy,
-            bus.get_proxy(
+        def to_cleanup(name: str, func: Callable[[], None]) -> None:
+            self._cleanuppers.append((name, func))
+
+        try:
+            prop_proxy = cast(
+                InterfaceProxy,
+                bus.get_proxy(
+                    player_id,
+                    "/org/mpris/MediaPlayer2",
+                    interface_name="org.freedesktop.DBus.Properties",
+                ),
+            )
+            to_cleanup(
+                "disconnect properties proxy",
+                lambda: disconnect_proxy(prop_proxy),
+            )
+
+            # Test the properties proxy.
+            try:
+                test_properties_proxy_for_timeout(prop_proxy)
+            except TimeoutError as e:
+                raise BadPlayer("Timeout error retrieving property") from e
+            except Exception:
+                _LOGGER.debug(
+                    "Ignoring non-timeout property get error -- "
+                    "any fatal errors will be handled downstream"
+                )
+
+            try:
+                prop_proxy_controller = SignalPropertiesController(prop_proxy)
+            except DBusError as e:
+                raise BadPlayer("Cannot set up properties changed mechanism") from e
+
+            try:
+                _LOGGER.debug("Getting all player properties")
+                entity_props = unpack(prop_proxy_controller.get_entity_properties())
+                player_props = prop_proxy_controller.get_properties()
+                _LOGGER.debug("Got player properties")
+            except DBusError as e:
+                raise BadPlayer("Cannot get player properties") from e
+
+            self.identity: str = entity_props.get(
+                "Identity",
+                entity_props.get(
+                    "DesktopEntry",
+                    self.player_id,
+                ),
+            )
+            _LOGGER.info(
+                "Player with bus ID %s has identity %s",
                 player_id,
-                "/org/mpris/MediaPlayer2",
-                interface_name="org.freedesktop.DBus.Properties",
-            ),
-        )
-
-        # First, test the properties proxy.
-        try:
-            test_properties_proxy_for_timeout(properties_proxy)
-        except TimeoutError as e:
-            disconnect_proxy(properties_proxy)
-            raise BadPlayer("Timeout error retrieving property") from e
-        except Exception:
-            _LOGGER.debug(
-                "Ignoring non-timeout property get error -- "
-                "any fatal errors will be handled downstream"
+                self.identity,
             )
 
-        self.properties_proxy = properties_proxy
-        try:
-            self.properties_proxy_controller = SignalPropertiesController(
-                self,
-                properties_proxy,
+            if entity_props.get("DesktopEntry") == "org.gnome.Totem":
+                # This player does not correctly emit the properties-changed
+                # signal, so we must default to using the other.
+                prop_proxy_controller = PollPropertiesController(prop_proxy)
+
+            prop_proxy_controller.connect(
+                "properties-changed",
+                self._handle_properties_changed,
             )
-        except DBusError as e:
-            self.cleanup()
-            raise BadPlayer("Cannot set up properties changed mechanism") from e
-
-        try:
-            _LOGGER.debug("Getting all player properties")
-            entity_props = unpack(
-                self.properties_proxy_controller.get_entity_properties(),
-            )
-            player_props = self.properties_proxy_controller.get_properties()
-            _LOGGER.debug("Got player properties")
-        except DBusError as e:
-            self.cleanup()
-            raise BadPlayer("Cannot get player properties") from e
-
-        self.identity: str = entity_props.get(
-            "Identity",
-            entity_props.get(
-                "DesktopEntry",
-                self.player_id,
-            ),
-        )
-        _LOGGER.info(
-            "Player with bus ID %s has identity %s",
-            player_id,
-            self.identity,
-        )
-
-        if entity_props.get("DesktopEntry") == "org.gnome.Totem":
-            # This player does not correctly emit the properties-changed
-            # signal, so we must default to using the other.
-            self.properties_proxy_controller = PollPropertiesController(
-                self,
-                self.properties_proxy,
+            to_cleanup(
+                "disconnect handle properties changed",
+                lambda: prop_proxy_controller.disconnect_by_func(
+                    self._handle_properties_changed
+                ),
             )
 
-        self.properties_proxy_controller.connect(
-            "properties-changed",
-            self._handle_properties_changed,
-        )
-        self.properties_proxy_controller.start()
+            prop_proxy_controller.start()
+            to_cleanup(
+                "stop properties proxy controller",
+                lambda: prop_proxy_controller.stop(),
+            )
 
-        try:
             kw = {}
             if self.identity.lower().startswith("chrom"):
                 kw["handler_factory"] = ChromiumObjectHandler
             if "vlc" in self.identity.lower():
                 kw["handler_factory"] = VLCObjectHandler
 
-            self.control_proxy = cast(
+            control_proxy = cast(
                 InterfaceProxy,
                 bus.get_proxy(
                     player_id,
@@ -615,63 +615,54 @@ class Player(GObject.GObject):
                     **kw,
                 ),
             )
+            to_cleanup(
+                "disconnect control proxy",
+                lambda: disconnect_proxy(control_proxy),
+            )
+
+            try:
+                if entity_props.get("DesktopEntry") == "org.gnome.Totem":
+                    raise Exception("Totem cannot use signal seek controller")
+                seek_controller = SignalSeekController(control_proxy, prop_proxy)
+            except Exception:
+                _LOGGER.exception(
+                    "Signal seek controller did not work, trying simulated one"
+                )
+                seek_controller = PollSeekController(control_proxy, prop_proxy)
+
+            seek_controller.connect("seeked", self._handle_seek)
+            to_cleanup(
+                "disconnect seeked from seek controller",
+                lambda: seek_controller.disconnect_by_func(self._handle_seek),
+            )
+
+            seek_controller.start()
+            to_cleanup("stop seek controller", lambda: seek_controller.stop())
+
+            self._update_player_properties(player_props, init=True)
+
+            self.control_proxy = control_proxy
+            to_cleanup("deref control proxy", lambda: delattr(self, "control_proxy"))
+
+            self.properties_proxy_controller = prop_proxy_controller
+            to_cleanup(
+                "deref properties proxy controller",
+                lambda: delattr(self, "properties_proxy_controller"),
+            )
+
         except Exception:
             self.cleanup()
-            raise
-
-        # FIXME
-        try:
-            if entity_props.get("DesktopEntry") == "org.gnome.Totem":
-                raise Exception("Totem cannot use signal seek controller")
-            self.seek_controller = SignalSeekController(
-                self, self.control_proxy, self.properties_proxy
-            )
-        except Exception:
-            _LOGGER.exception(
-                "Signal seek controller did not work, trying simulated one"
-            )
-            self.seek_controller = PollSeekController(
-                self, self.control_proxy, self.properties_proxy
-            )
-        self.seek_controller.connect("seeked", self._handle_seek)
-
-        self._update_player_properties(player_props, init=True)
 
     def cleanup(self) -> None:
-        if hasattr(self, "seek_controller"):
+        while self._cleanuppers:
+            name, cleanupper = self._cleanuppers.pop()
+            _LOGGER.debug("Cleanup: %s", name)
             try:
-                self.seek_controller.disconnect_by_func(self._handle_seek)
-            except ImportError:
-                # Python is shutting down.
-                pass
-            delattr(self, "seek_controller")
-
-        if hasattr(self, "control_proxy"):
-            try:
-                disconnect_proxy(self.control_proxy)
-            except (ImportError, DBusError):
-                # Python or the MPRIS bus owner is shutting down.
-                pass
-            delattr(self, "control_proxy")
-
-        if hasattr(self, "properties_proxy_controller"):
-            try:
-                self.properties_proxy_controller.disconnect_by_func(
-                    self._handle_properties_changed
-                )
-                self.properties_proxy_controller.stop()
-            except (ImportError, DBusError):
-                # Python or the MPRIS bus owner is shutting down.
-                pass
-            delattr(self, "properties_proxy_controller")
-
-        if hasattr(self, "properties_proxy"):
-            try:
-                disconnect_proxy(self.properties_proxy)
-            except (ImportError, DBusError):
-                # Python or the MPRIS bus owner is shutting down.
-                pass
-            delattr(self, "properties_proxy")
+                cleanupper()
+            except (ImportError, DBusError) as exc:
+                _LOGGER.debug("%s running %s", exc, name)
+            except Exception:
+                _LOGGER.exception("Cleanup error running %s", name)
 
     def __del__(self) -> None:
         self.cleanup()
@@ -735,14 +726,7 @@ class Player(GObject.GObject):
                 self.emit("property-changed", prop, value)
 
     def get_position(self) -> float | None:
-        try:
-            prop = self.properties_proxy.Get(
-                "org.mpris.MediaPlayer2.Player",
-                PROP_POSITION,
-            )
-            return float(unpack(prop)) / 1000 / 1000
-        except DBusError:
-            return None
+        return self.properties_proxy_controller.get_position()
 
     def play(self) -> None:
         if hasattr(self, "control_proxy"):

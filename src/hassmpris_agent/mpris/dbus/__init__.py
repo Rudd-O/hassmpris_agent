@@ -113,7 +113,7 @@ class BaseSeekController(GObject.GObject):
 
     def __init__(self, control_proxy, properties_proxy):
         # type: (Player, InterfaceProxy, InterfaceProxy) -> None
-        GObject.GObject.__init__(self)
+        super().__init__()
         self.control_proxy = control_proxy
         self.properties_proxy = properties_proxy
 
@@ -128,11 +128,7 @@ class BaseSeekController(GObject.GObject):
 class SignalSeekController(BaseSeekController):
     def __init__(self, control_proxy, properties_proxy):
         # type: (InterfaceProxy, InterfaceProxy) -> None
-        BaseSeekController.__init__(
-            self,
-            control_proxy,
-            properties_proxy,
-        )
+        super().__init__(control_proxy, properties_proxy)
         _LOGGER.debug("Signal seek controller chosen")
         self.started = False
 
@@ -170,11 +166,7 @@ class PollSeekController(BaseSeekController):
 
     def __init__(self, control_proxy, properties_proxy):
         # type: (InterfaceProxy, InterfaceProxy) -> None
-        BaseSeekController.__init__(
-            self,
-            control_proxy,
-            properties_proxy,
-        )
+        super().__init__(control_proxy, properties_proxy)
         (
             self._last_checked,
             self._status,
@@ -353,7 +345,7 @@ class BasePropertiesController(GObject.GObject):
     }
 
     def __init__(self, properties_proxy: InterfaceProxy) -> None:
-        GObject.GObject.__init__(self)
+        super().__init__()
         _LOGGER.debug("Using %s", self.__class__.__name__)
         self.properties_proxy = properties_proxy
 
@@ -404,7 +396,7 @@ class SignalPropertiesController(BasePropertiesController):
         properties proxy.
         """
         self._sources: list[int] = []
-        BasePropertiesController.__init__(self, properties_proxy)
+        super().__init__(properties_proxy)
         self.started = False
 
     def start(self) -> None:
@@ -460,7 +452,7 @@ class PollPropertiesController(BasePropertiesController):
         properties proxy.
         """
         self._sources: list[int] = []
-        BasePropertiesController.__init__(self, properties_proxy)
+        super().__init__(properties_proxy)
         self.started = False
 
     def start(self) -> None:
@@ -520,7 +512,7 @@ class Player(GObject.GObject):
 
     def __init__(self, bus: SessionMessageBus, player_id: str) -> None:
         _LOGGER.debug("Discovering player %s", player_id)
-        GObject.GObject.__init__(self)
+        super().__init__()
         self.player_id = player_id
         self._cleanuppers: list[tuple[str, Callable[[], Any]]] = []
 
@@ -624,21 +616,32 @@ class Player(GObject.GObject):
             try:
                 if entity_props.get("DesktopEntry") == "org.gnome.Totem":
                     raise Exception("Totem cannot use signal seek controller")
+
                 seek_controller = SignalSeekController(control_proxy, prop_proxy)
+
+                seek_controller.connect("seeked", self._handle_seek)
+                to_cleanup(
+                    "disconnect seeked from seek controller",
+                    lambda: seek_controller.disconnect_by_func(self._handle_seek),
+                )
+
+                seek_controller.start()
+                to_cleanup("stop seek controller", lambda: seek_controller.stop())
             except Exception:
                 _LOGGER.exception(
                     "Signal seek controller did not work, trying simulated one"
                 )
+
                 seek_controller = PollSeekController(control_proxy, prop_proxy)
 
-            seek_controller.connect("seeked", self._handle_seek)
-            to_cleanup(
-                "disconnect seeked from seek controller",
-                lambda: seek_controller.disconnect_by_func(self._handle_seek),
-            )
+                seek_controller.connect("seeked", self._handle_seek)
+                to_cleanup(
+                    "disconnect seeked from seek controller",
+                    lambda: seek_controller.disconnect_by_func(self._handle_seek),
+                )
 
-            seek_controller.start()
-            to_cleanup("stop seek controller", lambda: seek_controller.stop())
+                seek_controller.start()
+                to_cleanup("stop seek controller", lambda: seek_controller.stop())
 
             self._update_player_properties(player_props, init=True)
 
@@ -650,9 +653,9 @@ class Player(GObject.GObject):
                 "deref properties proxy controller",
                 lambda: delattr(self, "properties_proxy_controller"),
             )
-
         except Exception:
             self.cleanup()
+            raise
 
     def cleanup(self) -> None:
         while self._cleanuppers:
@@ -864,8 +867,7 @@ class DBusMPRISInterface(threading.Thread, GObject.GObject):
     }
 
     def __init__(self) -> None:
-        threading.Thread.__init__(self)
-        self.daemon = True
+        threading.Thread.__init__(self, daemon=True)
         GObject.GObject.__init__(self)
 
         self.loop = EventLoop()

@@ -83,26 +83,38 @@ def _service_record(mpris_port: int, cakes_port: int) -> AsyncServiceInfo:
 
 class Publisher(threading.Thread):
     def __init__(self, mpris_port: int, cakes_port: int) -> None:
+        self.mpris_port = mpris_port
+        self.cakes_port = cakes_port
+        self.loop = asyncio.new_event_loop()
+        self.cond = asyncio.Event()
+        self.cond_ended = asyncio.Event()
         threading.Thread.__init__(self, name="mDNS", daemon=True)
-        self.aiozc = AsyncZeroconf(ip_version=zeroconf.IPVersion.All)
-        self.service = _service_record(mpris_port, cakes_port)
 
     def run(self) -> None:
-        asyncio.run(self._publish())
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self._run())
 
-    async def _publish(self) -> None:
+    async def _run(self) -> None:
+        aiozc = AsyncZeroconf(ip_version=zeroconf.IPVersion.All)
+        service = _service_record(self.mpris_port, self.cakes_port)
         _LOGGER.debug("Publishing service record.")
-        await self.aiozc.async_register_service(self.service)
+        await aiozc.async_register_service(service)
         _LOGGER.debug("Published service record.")
-
-    async def _unpublish(self) -> None:
+        await self.cond.wait()
         _LOGGER.debug("Unpublishing service record.")
-        await self.aiozc.async_unregister_all_services()
-        await self.aiozc.async_close()
+        await aiozc.async_unregister_all_services()
+        await aiozc.async_close()
         _LOGGER.debug("Unpublished service record.")
+        self.cond_ended.set()
+
+    async def _end(self) -> bool:
+        self.cond.set()
+        return True
 
     def stop(self) -> None:
-        asyncio.run(self._unpublish())
+        fut = asyncio.run_coroutine_threadsafe(self._end(), self.loop)
+        while not fut.result():
+            time.sleep(0.1)
         self.join()
 
 

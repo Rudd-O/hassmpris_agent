@@ -113,7 +113,7 @@ class BaseSeekController(GObject.GObject):
 
     def __init__(self, control_proxy, properties_proxy):
         # type: (Player, InterfaceProxy, InterfaceProxy) -> None
-        super().__init__()
+        super().__init__()  # type: ignore
         self.control_proxy = control_proxy
         self.properties_proxy = properties_proxy
 

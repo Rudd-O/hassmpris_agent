@@ -1,0 +1,24 @@
+syntax = "proto3";
+package CAKES;
+
+message ECDHKey {
+    bytes pubkey = 1;
+}
+
+message Ack {
+}
+
+message IssueCertificateRequest{
+    bytes EncryptedCSR = 2;
+}
+
+message IssueCertificateReply {
+    bytes EncryptedClientCert = 1;
+    bytes EncryptedCertChain = 2;
+}
+
+service CAKES {
+    rpc ClientPubkey(ECDHKey) returns (Ack) {}
+    rpc ServerPubkey(Ack) returns (ECDHKey) {}
+    rpc IssueCertificate(IssueCertificateRequest) returns (IssueCertificateReply) {}
+}

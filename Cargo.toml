@@ -1,0 +1,39 @@
+[package]
+name = "hassmpris_agent"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.cargo-machete]
+ignored = ["prost", "tonic-prost"]
+
+[lib]
+
+[[bin]]
+name = "cli"
+path = "src/cli.rs"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[dependencies]
+async-stream = "0.3.6"
+derivative = "2.2.0"
+env_logger = "0.11.8"
+futures-util = "0.3.31"
+log = "0.4.27"
+tokio = { version = "1.47.1", features = ["fs", "macros", "rt", "time"] }
+zbus = "5.9.0"
+tonic = { version = "0.14.1", features = ["_tls-any", "tls-ring"] }
+tokio-stream = "0.1.17"
+microxdg = "0.2.0"
+clap = { version = "4.5.45", features = ["derive"] }
+blindecdh = { version = "0.1.0", path = "../rust-blindecdh" }
+prost = "0.14.1"
+tonic-prost = "0.14.1"
+zeroize = "1.8.1"
+ring = "0.17.14"
+tokio-util = "0.7.16"
+
+[build-dependencies]
+tonic-prost-build = "*"

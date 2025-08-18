@@ -14,5 +14,7 @@
         "${workspaceFolder}/../hassmpris/src",
         "${workspaceFolder}/../cakes/src"
     ],
-    "python.terminal.activateEnvInCurrentTerminal": false
+    "python.terminal.activateEnvInCurrentTerminal": false,
+    "makefile.configureOnOpen": false,
+    "editor.formatOnSave": true
 }

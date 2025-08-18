@@ -10,3 +10,8 @@ build
 *.rpm
 *.whl
 PKG-INFO
+
+
+# Added by cargo
+
+/target

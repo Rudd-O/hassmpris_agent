@@ -1,0 +1,113 @@
+syntax = "proto3";
+package MPRIS;
+
+import "google/protobuf/empty.proto";
+
+message MPRISUpdateRequest {
+}
+
+enum PlayerStatus {
+    UNKNOWN = 0;
+    GONE = 1;
+    APPEARED = 2;
+    PLAYING = 3;
+    PAUSED = 4;
+    STOPPED = 5;
+}
+
+message MPRISPlayerProperties {
+    optional bool CanControl = 1;    // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:CanControl
+    optional bool CanPause = 2;      // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:CanPause
+    optional bool CanPlay = 3;       // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:CanPlay
+    optional bool CanSeek = 4;       // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:CanSeek
+    optional bool CanGoNext = 5;     // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:CanGoNext
+    optional bool CanGoPrevious = 6; // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:CanGoPrevious
+    optional double Rate = 7;        // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:Rate
+    optional double MinimumRate = 8; // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:MinimumRate
+    optional double MaximumRate = 9; // https://specifications.freedesktop.org/mpris-spec/2.2/Player_Interface.html#Property:MaximumRate
+}
+
+message MPRISUpdateHeartbeat {
+}
+
+message MPRISPlayerSeeked {
+    float position = 1; // New position in seconds from the start of the track (float for fractionals).
+}
+
+message MPRISPlayerUpdate {
+    string player_id = 1;
+    PlayerStatus status = 2;
+    string json_metadata = 3;
+    MPRISPlayerProperties properties = 4;
+    MPRISPlayerSeeked seeked = 5;
+}
+
+message MPRISUpdateReply {
+    MPRISUpdateHeartbeat heartbeat = 1;
+    MPRISPlayerUpdate player = 2;
+}
+
+message ChangePlayerStatusRequest {
+    string player_id = 1;
+    enum PlaybackStatus {
+        UNCHANGED = 0;
+        PLAYING = 1;
+        PAUSED = 2;
+        STOPPED = 3;
+    }
+    PlaybackStatus status = 2;
+}
+
+message SeekRequest {
+    string player_id = 1;
+    float offset = 2;  // Position in seconds relative to current position (float for fractionals).
+}
+
+message SeekReply {
+}
+
+message SetPositionRequest {
+    string player_id = 1;
+    string track_id = 2;
+    float position = 3;  // Position in seconds relative to beginning of track (float for fractionals).
+}
+
+message SetPositionReply {
+}
+
+message ChangePlayerStatusReply {
+}
+
+message NextRequest {
+    string player_id = 1;
+}
+
+message NextReply {
+}
+
+message PreviousRequest {
+    string player_id = 1;
+}
+
+message PreviousReply {
+}
+
+message SeekAbsoluteRequest {
+    string player_id = 1;
+    float position = 2;  // Position in seconds relative to start (float for fractionals).
+}
+
+message SeekAbsoluteReply {
+}
+
+
+service MPRIS {
+    rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+    rpc Updates(MPRISUpdateRequest) returns (stream MPRISUpdateReply) {}
+    rpc ChangePlayerStatus(ChangePlayerStatusRequest) returns (ChangePlayerStatusReply) {}
+    rpc Next(NextRequest) returns (NextReply) {}
+    rpc Previous(PreviousRequest) returns (PreviousReply) {}
+    rpc Seek(SeekRequest) returns (SeekReply) {}
+    rpc SeekAbsolute(SeekAbsoluteRequest) returns (SeekAbsoluteReply) {}
+    rpc SetPosition(SetPositionRequest) returns (SetPositionReply) {}
+}
